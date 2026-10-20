@@ -1,0 +1,61 @@
+{
+  "name": "pairwise",
+  "productName": "Pairwise",
+  "version": "0.1.0",
+  "description": "A live AI tutor that feels like a pair-programming call: it sees your screen, talks, points with its own cursor, draws on anything and can demonstrate with your permission.",
+  "author": "Pairwise",
+  "license": "MIT",
+  "private": true,
+  "main": "out/main/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && node scripts/run-e2e.mjs",
+    "dev:linux": "PAIRWISE_FAKE_PLATFORM=1 PAIRWISE_MOCK_LIVE=1 electron-vite dev",
+    "mock-live": "node --experimental-strip-types test/mock-live/server.ts",
+    "dist:mac": "npm run build && electron-builder --mac --config electron-builder.yml",
+    "postinstall": "node scripts/postinstall.mjs",
+    "eval:grounding": "npm run build && PAIRWISE_EVAL_GROUNDER=gemini node scripts/run-e2e.mjs 05-calibration",
+    "predev": "node scripts/ensure-electron.mjs",
+    "prestart": "node scripts/ensure-electron.mjs",
+    "predev:linux": "node scripts/ensure-electron.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/caveat": "^5.3.0",
+    "@jitsi/robotjs": "^0.6.24",
+    "get-windows": "^9.3.0",
+    "jszip": "^3.10.2",
+    "pdfjs-dist": "^6.4.299",
+    "perfect-freehand": "^1.2.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "uiohook-napi": "^1.5.5",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "docx": "^9.12.0",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "pdf-lib": "^1.17.1",
+    "playwright-core": "^1.64.1",
+    "pptxgenjs": "^4.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

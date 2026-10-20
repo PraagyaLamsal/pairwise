@@ -1,0 +1,53 @@
+/*
+  Pairwise visual tokens.
+  Two voices, two inks: the tutor writes in blue, the student in orange. Everything else is
+  quiet native chrome so the ink (and the cursor buddy) carries the personality.
+*/
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-hand: 'Caveat', 'Bradley Hand', 'Chalkboard SE', cursive;
+
+  /* surfaces (cool graphite) */
+  --bg: #101318;
+  --bg-raised: #161a21;
+  --bg-sunken: #0c0e12;
+  --surface: #1b2029;
+  --surface-hover: #212734;
+  --border: #262d39;
+  --border-strong: #353e4d;
+
+  /* text */
+  --text: #e9edf3;
+  --text-2: #a3adbb;
+  --text-3: #6b7586;
+
+  /* inks */
+  --tutor: #2f7bff;
+  --tutor-hi: #6aa3ff;
+  --tutor-glow: rgba(47, 123, 255, 0.55);
+  --tutor-tint: rgba(47, 123, 255, 0.14);
+  --student: #ff8a1f;
+  --student-hi: #ffb067;
+  --student-tint: rgba(255, 138, 31, 0.14);
+
+  /* status */
+  --live: #f04e5e;
+  --ok: #34d399;
+  --warn: #ffb224;
+  --danger: #e5484d;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --radius-pill: 999px;
+
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease-spring: var(--ease-out);
+  }
+}

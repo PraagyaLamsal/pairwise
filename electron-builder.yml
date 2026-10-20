@@ -1,0 +1,45 @@
+# npm run dist:mac → dist/Pairwise-<version>-<arch>.dmg (unsigned; see BLOCKERS.md B-4 to sign)
+appId: app.pairwise.tutor
+# Every native module ships prebuilt N-API binaries (uiohook-napi, @jitsi/robotjs, get-windows):
+# nothing to rebuild, so packaging never needs Xcode or a compiler.
+npmRebuild: false
+productName: Pairwise
+copyright: Pairwise
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+  # pdf.js's optional canvas renderer (~60 MB): we only read the text layer.
+  - "!node_modules/@napi-rs/**"
+extraResources:
+  # Tray icons are read from process.resourcesPath/icons when packaged (src/main/tray.ts).
+  - from: resources/icons
+    to: icons
+    filter: ['*.png']
+asarUnpack:
+  # Native modules and pdf.js load from disk at runtime.
+  - node_modules/uiohook-napi/**
+  - node_modules/@jitsi/robotjs/**
+  - node_modules/get-windows/**
+  - node_modules/pdfjs-dist/**
+extraMetadata:
+  main: out/main/index.js
+mac:
+  category: public.app-category.education
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  icon: resources/icons/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: Pairwise listens to you during a tutoring session so you can talk to the tutor.
+    NSAppleEventsUsageDescription: Pairwise pauses and resumes the lecture video or music you were playing while you ask a question.
+dmg:
+  title: Pairwise

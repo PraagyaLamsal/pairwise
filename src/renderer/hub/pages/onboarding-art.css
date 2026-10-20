@@ -1,0 +1,178 @@
+.ob-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 26px;
+  padding: 40px;
+}
+.ob-window {
+  position: relative;
+  width: 420px;
+  flex: none;
+  border-radius: 12px;
+  background: #0b0e13;
+  border: 1px solid #262d39;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  overflow: visible;
+}
+.ob-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-bottom: 1px solid #1d232d;
+}
+.ob-titlebar span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2a313d;
+}
+.ob-titlebar em {
+  font-style: normal;
+  color: #6b7586;
+  font-size: 11px;
+  margin-left: 10px;
+}
+.ob-code {
+  margin: 0;
+  height: 186px;
+  box-sizing: border-box;
+  padding: 18px 20px 22px;
+  font: 13px/24px ui-monospace, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace;
+  color: #c9d3e0;
+  white-space: pre;
+}
+.ob-code .k { color: #c792ea; }
+.ob-code .f { color: #82aaff; }
+.ob-code .n { color: #f78c6c; }
+.ob-ink {
+  position: absolute;
+  left: 0;
+  top: 31px;
+  width: 420px;
+  height: 186px;
+  overflow: visible;
+  pointer-events: none;
+}
+.ob-ink path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.ob-ink .ring,
+.ob-ink .arrow,
+.ob-ink .arrow-head {
+  stroke: #2f7bff;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(47, 123, 255, 0.7));
+}
+.ob-ink .ring { animation: ob-ring 9s infinite; }
+.ob-ink .arrow { animation: ob-arrow 9s infinite; }
+.ob-ink .arrow-head { animation: ob-head 9s infinite; }
+.ob-ink .underline {
+  stroke: #ff8a1f;
+  stroke-width: 3.2;
+  animation: ob-under 9s infinite;
+}
+.ob-note {
+  position: absolute;
+  left: 202px;
+  top: 44px;
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: 22px;
+  color: #6aa3ff;
+  text-shadow: 0 0 10px rgba(47, 123, 255, 0.45);
+  clip-path: inset(0 100% 0 0);
+  animation: ob-note 9s infinite;
+}
+.ob-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  offset-path: path('M 360 260 C 300 230, 200 130, 134 96');
+  offset-rotate: 0deg;
+  offset-anchor: 3px 2px;
+  animation: ob-fly 9s infinite;
+  filter: drop-shadow(0 0 7px rgba(47, 123, 255, 0.85));
+}
+.ob-label {
+  position: absolute;
+  left: 18px;
+  top: 16px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #2f7bff;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(47, 123, 255, 0.6);
+}
+.ob-caption {
+  width: 420px;
+  color: #a3adbb;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.ob-caption .who {
+  display: inline-block;
+  min-width: 42px;
+  font-weight: 650;
+}
+.ob-caption .who.student { color: #ffb067; }
+.ob-caption .who.tutor { color: #6aa3ff; }
+
+@keyframes ob-fly {
+  0%, 6% { offset-distance: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  24% { offset-distance: 100%; }
+  86% { offset-distance: 100%; opacity: 1; }
+  94%, 100% { offset-distance: 100%; opacity: 0; }
+}
+@keyframes ob-ring {
+  0%, 25% { stroke-dashoffset: 1; opacity: 1; }
+  36% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  94%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes ob-arrow {
+  0%, 37% { stroke-dashoffset: 1; opacity: 1; }
+  44% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  94%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes ob-head {
+  0%, 44% { stroke-dashoffset: 1; opacity: 1; }
+  47% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  94%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes ob-note {
+  0%, 46% { clip-path: inset(0 100% 0 0); opacity: 1; }
+  56% { clip-path: inset(0 0 0 0); }
+  86% { clip-path: inset(0 0 0 0); opacity: 1; }
+  94%, 100% { clip-path: inset(0 0 0 0); opacity: 0; }
+}
+@keyframes ob-under {
+  0%, 60% { stroke-dashoffset: 1; opacity: 1; }
+  68% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  94%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-cursor,
+  .ob-ink path,
+  .ob-note {
+    animation: none;
+    offset-distance: 100%;
+    stroke-dashoffset: 0;
+    clip-path: none;
+  }
+}
