@@ -1,23 +1,38 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { GONE_AFTER, InkTracker, judge, maskOf, movingAreas, type Gray, type PxBox } from '../../src/renderer/engine/ink-track';
+
+type Glyph = [number, number, number, number];
+
+/** Glyph runs from `x` to about `end` on the line at `y` (content coordinates, px). */
+function glyphRun(rnd: () => number, y: number, x: number, end: number): Glyph[] {
+  const out: Glyph[] = [];
+  while (x < end) {
+    const gw = 2 + Math.floor(rnd() * 3);
+    const gh = 4 + Math.floor(rnd() * 4);
+    out.push([x, y + (7 - gh), gw, gh]);
+    x += gw + 1 + Math.floor(rnd() * 3) + (rnd() < 0.15 ? 5 : 0);
+  }
+  return out;
+}
 
 /** A seeded "screen of code": lines of glyph runs, rendered with sub-pixel vertical offsets. */
 function codeScreen(seed: number, offset = 0, w = 360, h = 240, lineH = 12): Gray {
   let s = seed;
   const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   // Glyph boxes in "content" coordinates (before scrolling), in px.
-  const glyphs: [number, number, number, number][] = [];
+  const glyphs: Glyph[] = [];
   for (let line = 0; line < 60; line++) {
-    const y = 6 + line * lineH;
-    let x = 8 + Math.floor(rnd() * 4) * 8;
-    const end = 60 + rnd() * 260;
-    while (x < end) {
-      const gw = 2 + Math.floor(rnd() * 3);
-      const gh = 4 + Math.floor(rnd() * 4);
-      glyphs.push([x, y + (7 - gh), gw, gh]);
-      x += gw + 1 + Math.floor(rnd() * 3) + (rnd() < 0.15 ? 5 : 0);
-    }
+    const x = 8 + Math.floor(rnd() * 4) * 8;
+    glyphs.push(...glyphRun(rnd, 6 + line * lineH, x, 60 + rnd() * 260));
   }
+  return render(glyphs, offset, w, h);
+}
+
+/** Dark glyphs on a light page, scrolled by `offset` px (partly covered rows are blended). */
+function render(glyphs: Glyph[], offset: number, w: number, h: number): Gray {
   const data = new Float32Array(w * h).fill(250);
   for (const [gx, gy, gw, gh] of glyphs) {
     const y1 = gy + offset;
@@ -103,6 +118,35 @@ describe('sticky ink: following what the marks point at', () => {
     expect(v.state).toBe('moved');
     expect(Math.abs(v.dy - 37.5)).toBeLessThanOrEqual(0.5);
     expect(v.lost).toEqual([]);
+  });
+
+  it("a short line isn't taken for a longer one that starts the same way", () => {
+    // `return a`, and five lines on `return n * factorial(n - 1)`: the box of the first covers
+    // just its text, which is how the second begins. Scrolled up 17.5 px (half a pixel), which
+    // puts the other marked line half under a static header.
+    let s = 11;
+    const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const glyphs: Glyph[] = [];
+    let short: Glyph[] = [];
+    for (let line = 0; line < 30; line++) {
+      const y = 6 + line * 12;
+      if (line === 6) glyphs.push(...(short = glyphRun(rnd, y, 8, 60)));
+      else if (line === 11) {
+        const twin = short.map(([x, gy, gw, gh]): Glyph => [x, gy + 60, gw, gh]);
+        glyphs.push(...twin, ...glyphRun(rnd, y, Math.max(...twin.map((g) => g[0] + g[2])) + 6, 300));
+      } else glyphs.push(...glyphRun(rnd, y, 8 + Math.floor(rnd() * 4) * 8, 120 + rnd() * 180));
+    }
+    const header = (img: Gray) => {
+      for (let y = 0; y < 40; y++) img.data.fill(200, y * img.width, (y + 1) * img.width);
+      return img;
+    };
+    const a = header(render(glyphs, 0, 360, 240));
+    const b = header(render(glyphs, -17.5, 360, 240));
+    const end = Math.max(...short.map((g) => g[0] + g[2]));
+    const boxes = [{ x: 6, y: 52, w: 300, h: 12 }, { x: 6, y: 76, w: end - 4, h: 12 }];
+    const v = judge(a, none(a), b, none(b), boxes);
+    expect(v.state).toBe('moved');
+    expect(Math.abs(v.dy + 17.5), `moved ${v.dy}`).toBeLessThanOrEqual(0.5);
   });
 
   it('another screen altogether is changed', () => {
@@ -303,4 +347,29 @@ describe('sticky ink: areas that never stop changing', () => {
     expect(areas.map((r) => Math.round(r.x + 1))).toEqual([500, 600]);
     expect(movingAreas(history.slice(0, 3), W, H, bounds)).toEqual([]); // too soon to tell
   });
+});
+
+describe('sticky ink on real captures', () => {
+  // Looks the engine took while the README's sticky scene scrolled (test/fixtures/sticky): the
+  // first marked line had gone under the header, the second was half under it, and the third
+  // (`return a`) is how a line five further on begins. The two scrolls were once taken for a
+  // five-line jump the other way, and the last half pixel of one for a jump of 72 px.
+  const dir = join(__dirname, '..', 'fixtures', 'sticky');
+  const meta = JSON.parse(readFileSync(join(dir, 'big-scroll.json'), 'utf8')) as { width: number; height: number; cases: { name: string; ref: string; cur: string; boxes: PxBox[]; dy: number; settle?: boolean }[] };
+  const look = (name: string) => ({
+    g: { width: meta.width, height: meta.height, data: new Uint8Array(gunzipSync(readFileSync(join(dir, `${name}.gray.gz`)))) },
+    m: new Uint8Array(gunzipSync(readFileSync(join(dir, `${name}.mask.gz`)))),
+  });
+  for (const c of meta.cases) {
+    it(`${c.name}: moved ${c.dy} px`, () => {
+      const ref = look(c.ref);
+      const cur = look(c.cur);
+      const v = judge(ref.g, ref.m, cur.g, cur.m, c.boxes);
+      if (c.settle && v.state !== 'moved') expect(['steady', 'unsure']).toContain(v.state);
+      else {
+        expect(v.state).toBe('moved');
+        expect(Math.abs(v.dy - c.dy), `moved ${v.dy}`).toBeLessThanOrEqual(0.5);
+      }
+    });
+  }
 });

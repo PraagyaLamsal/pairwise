@@ -57,6 +57,18 @@ const AGREE = 0.6;
 const MOVE_AGREE = 0.4;
 /** Gone: almost none of it is where it was, and no shift explains it. */
 const GONE = 0.2;
+/**
+ * Rows that didn't change at all, this many or more in a row across the marks' width, are
+ * something that doesn't scroll: a header, a toolbar, the desktop around a window. (The gaps
+ * between lines of text are thinner.) Content that moves under them is hidden, not different.
+ */
+const BAND_MIN = 6;
+/** What a hidden part of an anchor costs in the search: about what a poor match does. */
+const C_HIDDEN = 1;
+/** Of what can be seen, most has to agree; and at least this much of it has to be seen. */
+const SEEN_MIN = 0.25;
+/** A move only part of the group backs is taken only if no other shift comes this close. */
+const RIVAL_MARGIN = 0.1;
 /** Points per anchor (bigger ones are subsampled on a grid). */
 const MAX_POINTS = 2400;
 
@@ -138,25 +150,32 @@ function prepare(ref: Gray, refMask: Uint8Array, box: PxBox, index: number): Anc
   return { index, xs: Int32Array.from(xs), ys: Int32Array.from(ys), refs: Uint8Array.from(refs), act, weight: xs.length * Math.min(act, 40) };
 }
 
+/** How much of the anchor the last `score` could see (the rest was off the image or hidden). */
+const lastSeen = { share: 1 };
+
 /**
  * How unlike its old self an anchor is with the current image shifted by `dy` (fractional rows
- * are interpolated): mean absolute difference over its own texture. When too little of it can
- * be compared: Infinity if it's off the image, NaN (unknown) if it's masked.
+ * are interpolated): mean absolute difference over its own texture. `still` marks rows of
+ * things that don't scroll (see BAND_MIN): a pixel that was on one, or would be under one, says
+ * nothing about where the content went and isn't compared (`lastSeen.share` says how much could
+ * be). When too little of it can be seen: Infinity; when too little of that can be compared:
+ * NaN (masked).
  */
-function score(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1): number {
+function score(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1, still: Uint8Array | null = null): number {
   const W = cur.width;
   const H = cur.height;
   const fy = Math.floor(dy);
   const fr = dy - fy;
+  const hide = still !== null;
   let sum = 0;
   let n = 0;
   let tried = 0;
-  let outside = 0;
+  let hidden = 0;
   for (let k = 0; k < a.xs.length; k += step) {
     tried++;
     const y = a.ys[k] + fy;
-    if (y < 0 || y >= H - 1) {
-      outside++;
+    if (y < 0 || y >= H - 1 || (hide && (still![a.ys[k]] || still![y] || (fr && still![y + 1])))) {
+      hidden++;
       continue;
     }
     const i = y * W + a.xs[k];
@@ -165,8 +184,42 @@ function score(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1):
     sum += Math.abs(a.refs[k] - c);
     n++;
   }
-  if (n < tried * 0.5 || n < 8) return outside > tried - n - outside ? Infinity : NaN;
+  const visible = tried - hidden;
+  lastSeen.share = tried ? visible / tried : 0;
+  if (visible < tried * SEEN_MIN || visible < 8) return Infinity;
+  if (n < visible * 0.5 || n < 8) return NaN;
   return sum / n / Math.max(a.act, 3);
+}
+
+/**
+ * Rows (1) of things that don't scroll, between `ref` and `cur`: bands of at least BAND_MIN
+ * rows where nothing changed across `x1`..`x2` (the marks' width).
+ */
+function stillBands(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8Array, x1: number, x2: number): Uint8Array {
+  const W = cur.width;
+  const H = cur.height;
+  const step = Math.max(1, Math.floor((x2 - x1) / 320));
+  const per = Math.ceil((x2 - x1) / step);
+  const rows = new Uint8Array(H);
+  for (let y = 0; y < H; y++) {
+    let looked = 0;
+    let changed = 0;
+    for (let x = x1; x < x2; x += step) {
+      const i = y * W + x;
+      if (refMask[i] || curMask[i]) continue;
+      looked++;
+      if (Math.abs(ref.data[i] - cur.data[i]) > 10) changed++;
+    }
+    rows[y] = looked >= per * 0.3 && changed <= Math.max(1, looked * 0.01) ? 1 : 0;
+  }
+  const out = new Uint8Array(H);
+  for (let y = 0; y < H; ) {
+    let e = y;
+    while (e < H && rows[e]) e++;
+    if (e - y >= BAND_MIN) out.fill(1, y, e);
+    y = Math.max(e, y + 1);
+  }
+  return out;
 }
 
 /**
@@ -187,35 +240,6 @@ function staticAt(a: Anchor, ref: Gray, refMask: Uint8Array, cur: Gray, curMask:
     n++;
   }
   return n >= a.xs.length * 0.3 && sum / n / Math.max(a.act, 3) < T_STEADY;
-}
-
-/**
- * Like `score`, but a pixel that is unchanged where it was also counts as explained: a header,
- * toolbar or gutter that doesn't scroll looks the same before and after, and would otherwise
- * vote "nothing moved" for the part of a line under it. Only for shifts of a couple of pixels
- * and more: for tiny ones, edges that moved would match their own glyphs one pixel along.
- */
-function staticTolerantScore(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1): number {
-  const W = cur.width;
-  const H = cur.height;
-  const fy = Math.floor(dy);
-  const fr = dy - fy;
-  let sum = 0;
-  let n = 0;
-  let tried = 0;
-  for (let k = 0; k < a.xs.length; k += step) {
-    tried++;
-    const y = a.ys[k] + fy;
-    if (y < 0 || y >= H - 1) continue;
-    const i = y * W + a.xs[k];
-    const i0 = a.ys[k] * W + a.xs[k];
-    if (curMask[i] || (fr && curMask[i + W]) || curMask[i0]) continue;
-    const c = fr ? cur.data[i] * (1 - fr) + cur.data[i + W] * fr : cur.data[i];
-    sum += Math.min(Math.abs(a.refs[k] - c), Math.abs(a.refs[k] - cur.data[i0]));
-    n++;
-  }
-  if (n < tried * 0.5 || n < 8) return NaN;
-  return sum / n / Math.max(a.act, 3);
 }
 
 /** A score as a cost: anything that can't be compared counts as no match. */
@@ -255,53 +279,78 @@ export function judge(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8A
   if (steady >= AGREE) return verdict('steady', 0, steady, steady);
 
   // Where does it fit best? Coarse whole-pixel search on a subsample (~1500 points in all, so a
-  // long trace costs no more than one line), then quarter pixels.
+  // long trace costs no more than one line), then quarter pixels around the best few: a real
+  // half-pixel scroll scores worse at whole pixels than a look-alike line does (`return a`,
+  // five lines on, `return n * …`).
   const coarse = Math.max(3, Math.ceil(anchors.reduce((s, a) => s + a.xs.length, 0) / 1500));
-  const search = (fn: (a: Anchor, dy: number, step: number) => number, minShift: number, voters = anchors.map(() => true)) => {
-    const cost = (dy: number, step = 1) => anchors.reduce((s, a) => s + a.weight * capped(fn(a, dy, step)), 0) / total;
-    let best = 0;
-    let bestCost = minShift > 0 ? Infinity : cost(0, coarse);
-    for (let dy = -maxShift; dy <= maxShift; dy++) {
-      if (Math.abs(dy) < Math.max(1, minShift)) continue;
-      const c = cost(dy, coarse);
-      if (c < bestCost) {
-        bestCost = c;
-        best = dy;
-      }
+  // What doesn't scroll: content that moved under (or past) it can't be seen, which is not
+  // the same as not matching.
+  let x1 = Infinity;
+  let x2 = -Infinity;
+  for (const a of anchors) for (let k = 0; k < a.xs.length; k++) (x1 = Math.min(x1, a.xs[k])), (x2 = Math.max(x2, a.xs[k] + 1));
+  const still = stillBands(ref, refMask, cur, curMask, x1, x2);
+  const cost = (dy: number, step = 1) => {
+    let c = 0;
+    for (const a of anchors) {
+      const v = score(a, cur, curMask, dy, step, still);
+      c += a.weight * (lastSeen.share * capped(v) + (1 - lastSeen.share) * C_HIDDEN);
     }
-    let fine = best;
-    let fineCost = cost(best);
-    for (let d = best - 1; d <= best + 1.001; d += 0.25) {
-      if (d === best || Math.abs(d) < minShift) continue;
-      const c = cost(d);
-      if (c < fineCost) {
-        fineCost = c;
-        fine = d;
-      }
-    }
-    const atFine = anchors.map((a) => fn(a, fine, 1));
-    const match = anchors.reduce((s, a, k) => s + (voters[k] && atFine[k] < T_MATCH ? a.weight : 0), 0) / total;
-    const moved = Math.abs(fine) >= 0.5 && fineCost < cost(0) * 0.6;
-    return { fine, atFine, match, moved };
+    return c / total;
   };
-  const movedVerdict = (r: ReturnType<typeof search>) => {
+  const coarseCost: { dy: number; c: number }[] = [];
+  for (let dy = -maxShift; dy <= maxShift; dy++) coarseCost.push({ dy, c: cost(dy, coarse) });
+  coarseCost.sort((p, q) => p.c - q.c);
+  const candidates: number[] = [];
+  for (const { dy } of coarseCost) {
+    if (candidates.every((c) => Math.abs(c - dy) >= 3)) candidates.push(dy);
+    if (candidates.length === 3) break;
+  }
+  // Each candidate's best quarter-pixel shift; the best of them, and how close the next one comes.
+  const refined = candidates.map((c) => {
+    let at = c;
+    let best = Infinity;
+    for (let d = c - 1; d <= c + 1.001; d += 0.25) {
+      const v = cost(d);
+      if (v < best) (best = v), (at = d);
+    }
+    return { at, c: best };
+  });
+  refined.sort((p, q) => p.c - q.c);
+  const fine = refined[0].at;
+  const fineCost = refined[0].c;
+  const clear = (refined[1]?.c ?? Infinity) - fineCost >= RIVAL_MARGIN;
+  // How much of each anchor matches there, and how much of it could be seen at all.
+  const atFine: number[] = [];
+  let agreeing = 0;
+  let seenWeight = 0;
+  for (const a of anchors) {
+    const v = score(a, cur, curMask, fine, 1, still);
+    atFine.push(v);
+    seenWeight += a.weight * lastSeen.share;
+    if (v < T_MATCH) agreeing += a.weight * lastSeen.share;
+  }
+  const match = agreeing / total;
+  const matchSeen = seenWeight ? agreeing / seenWeight : 0;
+  const seenEnough = seenWeight / total >= SEEN_MIN;
+  const moved = Math.abs(fine) >= 0.5 && fineCost < cost(0) * 0.6;
+  // Most of it agrees; or none of it is still in place and most of what can be seen agrees
+  // (the rest went under a header, or off the screen); or a good part agrees and no other
+  // shift comes close.
+  if (moved && (match >= AGREE || (steady < GONE && ((seenEnough && matchSeen >= AGREE) || (match >= MOVE_AGREE && clear))))) {
     // Lost: off the screen, or under something that doesn't scroll (where it went still looks
     // the same as before). Masked isn't lost, and neither is content that's there but changed.
-    const lost = anchors.filter((a, k) => r.atFine[k] === Infinity || (r.atFine[k] >= T_LOST && staticAt(a, ref, refMask, cur, curMask, r.fine)));
-    return verdict('moved', r.fine, steady, r.match, lost.map((a) => a.index));
-  };
-  const agrees = (r: ReturnType<typeof search>) => r.moved && (r.match >= AGREE || (r.match >= MOVE_AGREE && steady < GONE));
-  const plain = search((a, dy, step) => score(a, cur, curMask, dy, step), 0);
-  if (agrees(plain)) return movedVerdict(plain);
-  // Within a pixel of where it was (a sub-pixel scroll): still there.
-  if (!plain.moved && plain.match >= AGREE) return verdict('steady', 0, steady, plain.match);
-  // Part of it can't agree: maybe it sits under something that doesn't scroll. Look again,
-  // letting unchanged pixels count as explained (a scroll of a couple of pixels and more).
-  // Only anchors that changed can say they moved: one still in place would agree with any shift.
-  const tolerant = search((a, dy, step) => staticTolerantScore(a, cur, curMask, dy, step), 2, at0.map((v) => !(v < T_STEADY)));
-  if (agrees(tolerant)) return movedVerdict(tolerant);
-  if (steady < GONE && plain.match < GONE + 0.1) return verdict('changed', 0, steady, plain.match);
-  return verdict('unsure', 0, steady, plain.match);
+    const lost = anchors.filter((a, k) => atFine[k] === Infinity || (atFine[k] >= T_LOST && staticAt(a, ref, refMask, cur, curMask, fine)));
+    return verdict('moved', fine, steady, match, lost.map((a) => a.index));
+  }
+  if (!moved && Math.abs(fine) <= 1) {
+    // Within a pixel of where it was (a sub-pixel scroll): still there.
+    if (match >= AGREE || (seenEnough && matchSeen >= AGREE)) return verdict('steady', 0, steady, match);
+    // No other shift comes close, but it doesn't quite match either (half a pixel off scores
+    // poorly where the screen changed; or a pointer or tooltip is over it): leave it be.
+    if (clear) return verdict('unsure', 0, steady, match);
+  }
+  if (steady < GONE && match < GONE + 0.1) return verdict('changed', 0, steady, match);
+  return verdict('unsure', 0, steady, match);
 }
 
 /**
@@ -342,7 +391,7 @@ interface GroupState {
   originMask: Uint8Array;
   offset: number;
   synced: boolean;
-  /** Marks whose line went out of view: how that line looked then, and where it was (px). */
+  /** Marks whose line went out of view: how that line first looked, and where it was then (px). */
   looks: Map<string, { look: Anchor; y: number }>;
   /** All of it went (another app, a far scroll): `ref` is the last good view, looked for in each new one. */
   away: boolean;
@@ -438,11 +487,13 @@ export class InkTracker {
     }
     if (g.away) return this.lookForIt(g, cur, mask, boxes);
     const v = judge(g.ref, g.refMask, cur, mask, boxes);
-    // A line that went out of view: remember how it looked (in the reference, before the move).
+    // A line that went out of view: remember how it looked when the marks were made (by the
+    // time it's lost it may be half under a header already), and where that was.
     if (v.state === 'moved') {
       for (const k of v.lost) {
-        const look = ids[k] ? prepare(g.ref, g.refMask, boxes[k], k) : null;
-        if (look) g.looks.set(ids[k], { look, y: boxes[k].y });
+        const first = { ...boxes[k], y: boxes[k].y - g.offset };
+        const look = ids[k] ? prepare(g.origin, g.originMask, first, k) : null;
+        if (look) g.looks.set(ids[k], { look, y: first.y });
       }
     }
     const still = v.state === 'unsure' && judge(g.prev, g.prevMask, cur, mask, boxes).state === 'steady';
