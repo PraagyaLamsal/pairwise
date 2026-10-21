@@ -413,3 +413,10 @@ questions. The Courses page shows a small card once ("New:" and four lines), clo
 "Got it" (`settings.whatsNewSeen` = `WHATS_NEW.id` in `src/shared/app-info.ts`; bump the id for the
 next set of changes). A fresh install never sees it — finishing onboarding marks it seen, as
 onboarding already shows what she does. It lives in the hub only, never on the session screen.
+
+### D-044 · "Notes saved" notification
+Notes are written a moment after a session ends, by which time the student has usually moved on.
+When they land, a macOS notification says so ("COMP 1405 · Why does factorial need an if
+statement · ✓ 2 of 3 quick checks"); clicking it opens the notes. Not shown when the course page
+is already in front (it refreshes itself), and it can be turned off in Settings → Tutor →
+Session notes → "Tell me when they're saved".

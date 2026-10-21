@@ -1,6 +1,7 @@
 import type { IndexStatus } from '@shared/courses';
 import { join } from 'node:path';
-import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, dialog, ipcMain, Notification, shell, type IpcMainInvokeEvent } from 'electron';
+import { basename } from 'node:path';
 import { APP_ID, APP_NAME, WHATS_NEW } from '@shared/app-info';
 import type { InvokeChannel, InvokeMap, SendMap } from '@shared/ipc';
 import { findConflicts } from '@shared/shortcuts';
@@ -121,7 +122,31 @@ async function main(): Promise<void> {
     }
   });
   session.on('needCourse', () => hub.open('courses'));
-  session.on('notesWritten', (file: string | null, courseId: string) => registry.send(['hub'], 'session:notesWritten', { courseId, file }));
+  session.on('notesWritten', (file: string | null, courseId: string) => {
+    registry.send(['hub'], 'session:notesWritten', { courseId, file });
+    if (file) notifyNotesSaved(file, courseId);
+  });
+
+  /**
+   * "Notes saved" in Notification Center when a session's notes land (they're written a moment
+   * after it ends) — unless the course page is already in front of the student. Click: open them.
+   */
+  function notifyNotesSaved(file: string, courseId: string): void {
+    if (!settings.get().notes.notify || hub.window?.isFocused()) return;
+    const course = courses.get(courseId);
+    const title = basename(file).replace(/^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} /, '').replace(/\.md$/, '');
+    const checks = courses.getResume(courseId)?.checks;
+    const body = [course?.code, title, checks?.total ? `✓ ${checks.right} of ${checks.total} quick checks` : ''].filter(Boolean).join(' · ');
+    if (env.e2e) ((globalThis as Record<string, unknown>).__notifications as unknown[] | undefined)?.push({ title: 'Session notes saved', body, file });
+    try {
+      if (!Notification.isSupported()) return;
+      const n = new Notification({ title: 'Session notes saved', body, silent: true });
+      n.on('click', () => void shell.openPath(file));
+      n.show();
+    } catch (e) {
+      log.debug('notification failed', e);
+    }
+  }
   session.on('openWhiteboard', () => session.openWhiteboard());
   session.coursework.brain.on('progress', (courseId: string, status: IndexStatus) => registry.broadcast('courses:indexProgress', { courseId, status }));
   courses.on('changed', (list) => {

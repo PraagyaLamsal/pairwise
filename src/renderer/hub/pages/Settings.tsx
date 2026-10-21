@@ -137,6 +137,9 @@ function TutorSection({ s, update }: SectionProps) {
         <Row title="Include the transcript">
           <Toggle checked={s.notes.includeTranscript} onChange={(includeTranscript) => void update({ notes: { includeTranscript } })} />
         </Row>
+        <Row title="Tell me when they're saved" help="A notification when the notes are ready, a moment after the session ends. Click it to open them.">
+          <Toggle checked={s.notes.notify} onChange={(notify) => void update({ notes: { notify } })} />
+        </Row>
       </Group>
     </>
   );

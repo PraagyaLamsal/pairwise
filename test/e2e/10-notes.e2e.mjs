@@ -68,6 +68,7 @@ try {
 
   // --- end: notes are written into the course folder --------------------------------------------
   const tEnd = Date.now();
+  await S(() => (globalThis.__notifications = []));
   await S(() => globalThis.__pairwise.session.end());
   await waitFor(() => S(() => globalThis.__pairwise.session.snapshot.status === 'idle'), { label: 'ended' });
   const endMs = Date.now() - tEnd;
@@ -79,6 +80,11 @@ try {
   const md = readFileSync(join(dir, files[0]), 'utf8');
   console.log(`notes: ${files[0]}\n${md.split('\n').slice(0, 14).join('\n')}`);
   assert.match(files[0], /^\d{4}-\d\d-\d\d \d\d\.\d\d Why does factorial need an if statement\.md$/);
+  // …and a "Notes saved" notification says so (the course page isn't in front), opening them on click.
+  const shown = await S(() => globalThis.__notifications);
+  assert.equal(shown.length, 1, JSON.stringify(shown));
+  assert.equal(shown[0].body, 'COMP 1405 · Why does factorial need an if statement');
+  assert.equal(shown[0].file, join(dir, files[0]));
   for (const h of ['## Summary', '## Key ideas', '## Definitions', '## To review', '## Diagrams', '## Sources from your course', '## Conversation (condensed)']) assert.ok(md.includes(h), `notes have ${h}`);
   assert.match(md, /Trace factorial\(3\) by hand/);
   assert.match(md, /Lecture 05 - Recursion/);

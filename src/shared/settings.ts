@@ -58,6 +58,8 @@ export interface Settings {
   notes: {
     enabled: boolean;
     includeTranscript: boolean;
+    /** A "Notes saved" notification when they're written (click opens them). */
+    notify: boolean;
   };
   budget: {
     monthlyLimitUsd: number;
@@ -123,7 +125,7 @@ export function defaultSettings(): Settings {
     sounds: true,
     veil: { apps: DEFAULT_VEIL_APPS.map((a) => ({ ...a })), hideNotifications: true, showOutlines: true },
     privacy: { saveAnnotatedScreenshots: false },
-    notes: { enabled: true, includeTranscript: true },
+    notes: { enabled: true, includeTranscript: true, notify: true },
     budget: { monthlyLimitUsd: 25, warnAtPercent: 80, hardStop: true },
     takeover: { enabled: true, typingCharsPerSecond: 18, autoRevokeSec: 45 },
     shortcuts: { ...DEFAULT_SHORTCUTS },
