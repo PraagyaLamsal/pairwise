@@ -14,6 +14,13 @@ keep it current: tick items, add findings, record decisions in DECISIONS.md.
   (round 2 bullets) and B-8.
 * v0.1 (all six build phases) is in PROGRESS.md. Round 1's last fix: Electron 44 no longer
   downloads its binary in `npm install`; `scripts/ensure-electron.mjs` handles it (D-027).
+* **After round 2, a polish pass** (PROGRESS.md "After round 2", D-037 to D-042): Ada traces
+  code like a debugger (`trace_code`, value chips beside each line), asks "Show me" questions
+  (`ask_to_point`, the student clicks the answer; checks go into the notes), an idle session
+  uses about half the CPU it did, macOS Reduce motion is followed, a dropped connection is
+  ridden out for two minutes, and the README has animated demos recorded from the real app
+  (`node scripts/record-demos.mjs`). The full e2e suite is 19 runs (13-trace at 1× and 2×,
+  14-motion, 15-quiz added).
 
 ## The owner's requests (verbatim, 2026-10-20)
 
@@ -290,6 +297,13 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
 * **Screenshots under Xvfb:** the root capture can contain a stale copy of the overlays; the
   harness hides overlay content while it grabs the screen underneath.
 * **Text widths:** measure, don't guess — Caveat is ~0.34 em/char on phrases, Inter 600 ~0.50.
+* **Node's WebSocket** fires `error` but no `close` when a connection never opens: anything that
+  waits for `close` waits out its timeout (fixed in `LiveClient.connect`, D-042).
+* **Recording motion under Xvfb:** root-window captures don't contain the composited overlays;
+  `beginFrameSubscription` on the overlay window gives every painted frame (record-demos.mjs).
+* **The OCR stand-in** splits low-confidence symbols ("==") onto their own lines; quoted code
+  lines are matched by row now, and words Tesseract reads below 30 % confidence are dropped, so
+  a test that needs such a line passes its box instead (13-trace does at 2×).
 
 ## What could come next (not requested yet)
 
@@ -297,13 +311,18 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
 * A stable signing certificate by default (permissions survive rebuilds), or a notarized DMG.
 * Cursor presence tuning from real use (idle 35 %, near 12 %, 1.2 s, 60 px are all constants in
   `src/main/session/cursor.ts`).
+* How well the real model traces (the planner's trace mode) and how often it asks "Show me"
+  questions, with a key; both prompts are in `src/main/vision/planner.ts` and
+  `src/main/session/prompts.ts`.
+* Battery on a real Mac (Activity Monitor during an idle session), and Reduce motion with the
+  system setting on.
 
 ## Environment notes for the next session
 
 * The e2e suite needs Linux with `Xvfb`, `xcompmgr`, `tesseract-ocr` and `xdotool`, plus
   Electron's runtime libraries (`libnss3`, `libgbm1`, `libasound2`, `libgtk-3-0`…). Install with
   apt if missing. `node scripts/run-e2e.mjs <filter>` runs a subset. `E2E_SCALES=1,2` is the
-  default for 03, 05 and 12.
+  default for 03, 05, 12 and 13. The README demos need `ffmpeg` and Pillow as well.
 * Fake platform and fake displays are used in tests (`PAIRWISE_FAKE_PLATFORM`, `FAKE_DISPLAYS`
   1× and 2×). `PAIRWISE_MOCK_LIVE` is the local Gemini Live mock; `PAIRWISE_MOCK_SCRIPT=none`
   gives scripted control from tests.
