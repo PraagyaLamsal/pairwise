@@ -34,7 +34,7 @@ const { checksForNotes } = await import('../../src/main/session/features/quiz');
 
 describe('quick checks in the session notes', () => {
   it('lists each check once, with tries, and keeps the missed ones to review', () => {
-    const { lines, missed } = checksForNotes([
+    const { lines, missed, right, total } = checksForNotes([
       { question: 'Click the line where the recursion stops', outcome: 'right' },
       { question: 'Click the button that runs the code', outcome: 'wrong' },
       { question: 'Click the button that runs the code', outcome: 'right' },
@@ -42,6 +42,8 @@ describe('quick checks in the session notes', () => {
       { question: 'Click the base case', outcome: 'wrong' },
       { question: 'Point at anything', outcome: 'answered' },
     ]);
+    // The score for the course page: 2 of 4 (the unchecked one doesn't count).
+    expect([right, total]).toEqual([2, 4]);
     expect(lines).toEqual([
       '✓ Click the line where the recursion stops',
       '✓ Click the button that runs the code (second try)',
@@ -50,6 +52,6 @@ describe('quick checks in the session notes', () => {
       '• Point at anything',
     ]);
     expect(missed).toEqual(['Quick check to try again: “Click where n gets smaller”', 'Quick check to try again: “Click the base case”']);
-    expect(checksForNotes([])).toEqual({ lines: [], missed: [] });
+    expect(checksForNotes([])).toEqual({ lines: [], missed: [], right: 0, total: 0 });
   });
 });

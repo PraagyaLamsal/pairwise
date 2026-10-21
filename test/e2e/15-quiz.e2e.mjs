@@ -4,7 +4,7 @@
 // answer she had in mind. A wrong click says how far off it was; Esc skips.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { launch, main, waitFor, sleep, artifacts, assert, FAKE_DISPLAYS, openTargetWindow, callTool, screenShot, pointer } from './harness.mjs';
+import { launch, main, waitFor, sleep, artifacts, assert, FAKE_DISPLAYS, openTargetWindow, callTool, screenShot, pointer, windowByRole } from './harness.mjs';
 
 const { app } = await launch({ PAIRWISE_GROUNDER: 'ocr', PAIRWISE_MOCK_SCRIPT: 'none' });
 const S = (fn, arg) => main(app, fn, arg);
@@ -128,6 +128,10 @@ try {
   assert.deepEqual(await answering(), overlays.map(() => false), 'and the screen is back to normal');
 
   // --- 5. the checks end up in the session notes; the skipped one is there to review --------
+  // (The course page is open while the session ends: it must refresh once the notes are written,
+  // which happens a moment after the session is over.)
+  await S(() => globalThis.__pairwise.hub.open('courses'));
+  const hub = await windowByRole(app, 'hub');
   await S(() => globalThis.__pairwise.session.end());
   await waitFor(() => S(() => globalThis.__pairwise.session.snapshot.status === 'idle'), { label: 'ended', timeout: 15_000 });
   const file = await S(async () => {
@@ -142,6 +146,13 @@ try {
   assert.ok(notes.includes('✓ Click the button that runs the code (second try)'), 'the second, right on the second try');
   assert.ok(notes.includes('– Click where n gets smaller (skipped)'), 'the skipped one');
   assert.ok(/## To review[\s\S]*Quick check to try again: “Click where n gets smaller”/.test(notes), 'and the skipped one is to review next time');
+  // The course page shows how it went, as soon as the notes are written.
+  const resume = await S((_e, id) => globalThis.__pairwise.courses.getResume(id), courseId);
+  assert.deepEqual(resume.checks, { right: 2, total: 3 }, JSON.stringify(resume.checks));
+  await waitFor(() => hub.evaluate(() => document.querySelector('.checks-chip')?.textContent ?? ''), { label: 'the score on the course page', timeout: 8000 });
+  const chipText = await hub.evaluate(() => document.querySelector('.checks-chip').textContent);
+  assert.equal(chipText.trim(), '✓ 2 of 3 quick checks');
+  await hub.locator('.start-zone').screenshot({ path: join(artifacts, 'p15-course-checks.png') });
 
   console.log(`show me: right answer on target, wrong one ${r2.off_by_px} px off, the app underneath untouched, Esc skips, checks in the notes`);
   console.log('show-me e2e: all checks passed');

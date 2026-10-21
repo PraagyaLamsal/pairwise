@@ -166,9 +166,9 @@ export class NotesFeature {
       log.info(`notes written: ${file}`);
     } catch (e) {
       log.warn('could not write notes', e);
-      return { summary: draft.summary, openQuestions: draft.openQuestions, toReview: draft.toReview };
+      return { summary: draft.summary, openQuestions: draft.openQuestions, toReview: draft.toReview, checks: checks.total ? { right: checks.right, total: checks.total } : undefined };
     }
-    return { summary: draft.summary.slice(0, 400), openQuestions: draft.openQuestions.slice(0, 5), toReview: draft.toReview.slice(0, 8), lastNotesFile: file };
+    return { summary: draft.summary.slice(0, 400), openQuestions: draft.openQuestions.slice(0, 5), toReview: draft.toReview.slice(0, 8), lastNotesFile: file, checks: checks.total ? { right: checks.right, total: checks.total } : undefined };
   }
 
   private markdown(d: NotesDraft, m: { course: string; at: Date; minutes: number; cites: string[]; images: { alt: string; rel: string }[]; captions: Caption[]; checks?: string[]; assignment?: string }): string {

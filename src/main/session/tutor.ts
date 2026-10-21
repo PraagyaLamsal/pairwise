@@ -252,7 +252,7 @@ export class TutorSession extends SessionController {
         .then((extra) => {
           const prev = this.deps.courses.getResume(courseId);
           if (extra && prev) this.deps.courses.saveResume({ ...prev, ...extra, savedAt: Date.now() });
-          this.emit('notesWritten', extra?.lastNotesFile ?? null);
+          this.emit('notesWritten', extra?.lastNotesFile ?? null, courseId);
         })
         .catch((e) => log.warn('notes failed', e))
         .finally(() => {

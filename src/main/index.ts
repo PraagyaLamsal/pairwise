@@ -121,6 +121,7 @@ async function main(): Promise<void> {
     }
   });
   session.on('needCourse', () => hub.open('courses'));
+  session.on('notesWritten', (file: string | null, courseId: string) => registry.send(['hub'], 'session:notesWritten', { courseId, file }));
   session.on('openWhiteboard', () => session.openWhiteboard());
   session.coursework.brain.on('progress', (courseId: string, status: IndexStatus) => registry.broadcast('courses:indexProgress', { courseId, status }));
   courses.on('changed', (list) => {

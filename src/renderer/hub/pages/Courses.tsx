@@ -140,10 +140,11 @@ function CourseDetail({ course, onEdit }: { course: Course; onEdit: () => void }
     setError(null);
   }, [load]);
   useIpcEvent('courses:indexProgress', (p) => p.courseId === course.id && p.status.state === 'ready' && void load());
-  // A session just ended: its notes are new.
+  // A session just ended: its notes are new (they're written a moment later, in the background).
   useEffect(() => {
     if (snap.status === 'idle') void load();
   }, [snap.status, load]);
+  useIpcEvent('session:notesWritten', (m) => m.courseId === course.id && void load());
 
   const live = snap.status !== 'idle' && snap.status !== 'error' && snap.courseId === course.id;
 
@@ -207,6 +208,11 @@ function CourseDetail({ course, onEdit }: { course: Course; onEdit: () => void }
           <div className="resume-note">
             <span className="hand">Last time:</span>
             {resume.summary}
+            {resume.checks && resume.checks.total > 0 && (
+              <span className="checks-chip" title="Ada's “Show me” questions last session">
+                ✓ {resume.checks.right} of {resume.checks.total} quick check{resume.checks.total === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
         )}
         {assignment && !live && (

@@ -24,7 +24,7 @@ export interface QuizResult {
  * The session's quick checks as note lines (a question asked again after a hint counts once,
  * with how many tries it took) and the ones still missed, to review next time.
  */
-export function checksForNotes(results: QuizResult[]): { lines: string[]; missed: string[] } {
+export function checksForNotes(results: QuizResult[]): { lines: string[]; missed: string[]; right: number; total: number } {
   const groups: { question: string; outcomes: QuizResult['outcome'][] }[] = [];
   for (const r of results) {
     const last = groups[groups.length - 1];
@@ -41,7 +41,9 @@ export function checksForNotes(results: QuizResult[]): { lines: string[]; missed
     return `• ${g.question}`;
   });
   const missed = groups.filter((g) => ['wrong', 'skipped'].includes(g.outcomes[g.outcomes.length - 1])).map((g) => `Quick check to try again: “${g.question}”`);
-  return { lines, missed };
+  // Only checks with an answer to check against count towards the score.
+  const scored = groups.filter((g) => g.outcomes[g.outcomes.length - 1] !== 'answered');
+  return { lines, missed, right: scored.filter((g) => g.outcomes[g.outcomes.length - 1] === 'right').length, total: scored.length };
 }
 
 export interface AnswerResult {

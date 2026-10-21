@@ -113,6 +113,8 @@ export interface EventMap {
   'courses:indexProgress': { courseId: string; status: IndexStatus };
   'usage:changed': UsageSummary;
   'hub:navigate': { tab: string };
+  /** A session's notes (and the resume summary) are written: the course page refreshes. */
+  'session:notesWritten': { courseId: string; file: string | null };
   'overlay:init': OverlayInit;
   'overlay:cursor': CursorFrame;
   'overlay:flight': CursorFlight;
@@ -272,7 +274,7 @@ export const INVOKE_CHANNELS: InvokeChannel[] = [
 
 export const EVENT_CHANNELS: EventChannel[] = [
   'session:snapshot', 'session:caption', 'session:levels', 'settings:changed', 'courses:changed', 'courses:indexProgress',
-  'usage:changed', 'hub:navigate', 'overlay:init', 'overlay:cursor', 'overlay:flight', 'overlay:trace', 'overlay:cursorCancel', 'overlay:ink', 'overlay:ui',
+  'usage:changed', 'hub:navigate', 'session:notesWritten', 'overlay:init', 'overlay:cursor', 'overlay:flight', 'overlay:trace', 'overlay:cursorCancel', 'overlay:ink', 'overlay:ui',
   'overlay:drawMode', 'overlay:answerMode', 'overlay:celebrate', 'overlay:calibration', 'whiteboard:ink', 'whiteboard:init', 'overlay:penItems', 'whiteboard:drawMode',
   'whiteboard:requestSnapshot', 'engine:command',
 ];
