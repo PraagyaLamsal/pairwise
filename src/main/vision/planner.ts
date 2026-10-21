@@ -6,7 +6,7 @@ const log = logger('planner');
 
 /** One mark (or pointer gesture) in a planned beat, in the screenshot's own 0–1000 coordinates. */
 export interface PlannedMark {
-  kind: 'circle' | 'underline' | 'highlight' | 'box' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'bracket' | 'hover' | 'follow_line' | 'sweep';
+  kind: 'circle' | 'underline' | 'highlight' | 'box' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'bracket' | 'hover' | 'follow_line' | 'sweep' | 'value';
   /** [ymin, xmin, ymax, xmax] of what the mark is about. */
   box_2d?: number[];
   /** [y, x] for arrow tails or free-standing notes/badges. */
@@ -29,10 +29,10 @@ export interface Plan {
 const MARK = {
   type: 'OBJECT',
   properties: {
-    kind: { type: 'STRING', enum: ['hover', 'follow_line', 'sweep', 'circle', 'underline', 'highlight', 'box', 'arrow', 'text', 'step', 'check', 'cross', 'bracket'] },
+    kind: { type: 'STRING', enum: ['hover', 'follow_line', 'sweep', 'value', 'circle', 'underline', 'highlight', 'box', 'arrow', 'text', 'step', 'check', 'cross', 'bracket'] },
     box_2d: { type: 'ARRAY', items: { type: 'INTEGER' }, description: '[ymin, xmin, ymax, xmax] 0-1000 of the thing this mark is about' },
     point: { type: 'ARRAY', items: { type: 'INTEGER' }, description: '[y, x] 0-1000: arrow tail, or where a free-standing note starts' },
-    text: { type: 'STRING', description: 'For text marks: at most 5 words. For arrows: optional note at the tail.' },
+    text: { type: 'STRING', description: 'For text marks: at most 5 words. For arrows: optional note at the tail. For value: the values, at most 24 characters.' },
     number: { type: 'INTEGER' },
     label: { type: 'STRING', description: 'What the mark points at, 2-4 words' },
   },
@@ -69,6 +69,10 @@ export interface PlanRequest {
   assignment?: string;
   /** What the student drew, if this follows a hold-to-ask question. */
   studentMarks?: string;
+  /** 'trace': step through code like a debugger, with the values after each line. */
+  mode?: 'explain' | 'trace';
+  /** For a trace: the input to run it with, e.g. "factorial(3)". */
+  input?: string;
 }
 
 /**
@@ -88,8 +92,9 @@ export class ExplanationPlanner {
 
   async plan(req: PlanRequest, signal?: AbortSignal): Promise<Plan> {
     const t0 = Date.now();
-    const lines = Math.max(2, Math.min(6, req.lines || 4));
-    const prompt = [
+    const trace = req.mode === 'trace';
+    const lines = trace ? Math.max(3, Math.min(10, req.lines || 6)) : Math.max(2, Math.min(6, req.lines || 4));
+    const prompt = (trace ? tracePrompt(req, lines) : [
       `You are ${req.tutorName}, a tutor explaining something on a student's screen out loud while drawing on it with a marker. Course: ${req.courseLine}.`,
       req.terms.length ? `Use the course's own terms where they fit: ${req.terms.slice(0, 20).join('; ')}.` : '',
       `The student asks: "${req.question}"${req.focus ? ` (focus: ${req.focus})` : ''}.`,
@@ -101,25 +106,45 @@ export class ExplanationPlanner {
       req.depth === 'brief' ? 'Keep it short.' : req.depth === 'deep' ? 'Go a little deeper with the reasoning.' : '',
       req.assignment ? `This is a graded assignment (${req.assignment}): explain concepts and point at relevant parts, but never give the solution or write their answer.` : '',
       'Never box anything inside black areas labelled "hidden by App Veil".',
-    ]
+    ])
       .filter(Boolean)
       .join('\n');
     const r = await this.rest.generateJson<{ beats?: PlannedBeat[] }>(
       this.model(),
       {
         contents: [{ role: 'user', parts: [{ inlineData: { mimeType: req.frame.mime, data: Buffer.from(req.frame.data).toString('base64') } }, { text: prompt }] }],
-        generationConfig: { responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: 'low' }, temperature: 0.4, maxOutputTokens: 2048 },
+        // A trace's values have to be right: give it room to work them out.
+        generationConfig: { responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: trace ? 'medium' : 'low' }, temperature: trace ? 0.2 : 0.4, maxOutputTokens: trace ? 4096 : 2048 },
       },
-      { timeoutMs: 25_000, inputModality: 'IMAGE' },
+      { timeoutMs: trace ? 40_000 : 25_000, inputModality: 'IMAGE' },
     );
     if (signal?.aborted) return { beats: [], ms: Date.now() - t0 };
     const beats = (r.beats ?? [])
       .filter((b) => typeof b?.say === 'string' && b.say.trim())
-      .slice(0, 6)
+      .slice(0, trace ? 10 : 6)
       .map((b) => ({ say: b.say.trim(), marks: (b.marks ?? []).filter(validMark).slice(0, 3) }));
     log.info(`planned ${beats.length} beats in ${Date.now() - t0} ms`);
     return { beats, ms: Date.now() - t0 };
   }
+}
+
+/** The planning prompt for trace_code: execution order, one step per beat, values beside lines. */
+function tracePrompt(req: PlanRequest, steps: number): string[] {
+  return [
+    `You are ${req.tutorName}, a tutor tracing code on a student's screen out loud, like a debugger: your cursor moves to each line as it runs, and the values right after it runs appear beside that line. Course: ${req.courseLine}.`,
+    req.terms.length ? `Use the course's own terms where they fit: ${req.terms.slice(0, 20).join('; ')}.` : '',
+    `The student asks: "${req.question}"${req.focus ? ` (focus: ${req.focus})` : ''}.`,
+    req.input ? `Trace it with this input: ${req.input}.` : 'Pick a small, typical input and say which one in the first beat.',
+    req.studentMarks ? `They marked: ${req.studentMarks}.` : '',
+    `Write at most ${steps} beats, in the order the code runs. Each beat is what you SAY (one short spoken sentence — no markdown, never read symbols aloud) plus its marks:`,
+    '- "follow_line" (or "hover" for a short line) with a tight box_2d [ymin, xmin, ymax, xmax] (0–1000) around the text of the line being run, and',
+    '- "value" with the same box_2d and text = the values right after that line runs, e.g. "n = 3", "i = 2, total = 3", "3 == 0 → False", "returns 6" (at most 24 characters). When a line runs again, give it the new value; it replaces the old one.',
+    "For recursion, show each call's argument on the way down and what each call returns on the way back up. For a loop, trace the first two or three iterations, then say where it ends up.",
+    'The first beat says what you are tracing and with which input; the last one gives the result. The values must be exactly right: work the whole trace out carefully before you write it.',
+    'Only use lines that are actually visible in this screenshot.',
+    req.assignment ? `This is a graded assignment (${req.assignment}): trace the student's own code to help them see what it does, but never write the solution for them.` : '',
+    'Never box anything inside black areas labelled "hidden by App Veil".',
+  ];
 }
 
 function validMark(m: PlannedMark): boolean {
@@ -127,6 +152,7 @@ function validMark(m: PlannedMark): boolean {
   const okBox = Array.isArray(m.box_2d) && m.box_2d.length === 4 && m.box_2d.every((v) => Number.isFinite(v));
   const okPoint = Array.isArray(m.point) && m.point.length === 2 && m.point.every((v) => Number.isFinite(v));
   if (m.kind === 'hover' || m.kind === 'follow_line' || m.kind === 'sweep') return okBox;
+  if (m.kind === 'value') return okBox && typeof m.text === 'string' && m.text.trim().length > 0;
   if (m.kind === 'text') return Boolean(m.text) && (okBox || okPoint);
   if (m.kind === 'arrow') return okBox || okPoint;
   return okBox || (okPoint && (m.kind === 'step' || m.kind === 'check' || m.kind === 'cross'));

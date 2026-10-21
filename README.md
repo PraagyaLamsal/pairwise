@@ -12,6 +12,10 @@ a list) and draws only when it helps — in Tuple's flat, round-ended brush, wit
 screen stays quiet: a small session pill and her dimmed cursor, nothing else, until something
 happens. It's a normal Mac app you can keep in the Dock (`npm run app`), with a menu-bar icon too.
 
+Ask what your code actually does and she **traces it like a debugger, on your own screen**: her
+cursor steps through the lines as they run while she talks, and the values appear right after
+each line (`n = 3`, `returns 6`), updating in place as a loop or a recursive call goes round.
+
 Built for macOS (v1), structured so Windows/Linux can follow (`src/main/platform/`). Gemini only.
 
 | | |
@@ -39,6 +43,7 @@ a Mac the system fonts and window chrome differ; the overlay, cursor and ink are
 | ![Every mark kind](docs/screenshots/pen-marks.png) | **Her pen.** Circles, underlines, highlights, arrows, boxes, checks and step badges, drawn at a human pace (each stroke eases in and out, slows into corners, and the pen lifts between strokes) and never twice the same. |
 | ![A typed note while typing, then done](docs/screenshots/typed-note.png) | **Typed notes, like Tuple's text tool.** Letter by letter in the system font, with a caret and a dotted outline while she types. (Handwriting is a setting.) |
 | ![Ada's cursor following a line](docs/screenshots/follow-line.png) ![Ada's cursor sweeping down a function](docs/screenshots/sweep.png) | **Her cursor as a pointer.** Most of the time she just points: she follows a line under the text as she reads it, runs down a block line by line, or rests on the thing she means — nothing drawn, no label. |
+| ![Ada traces factorial(2): value chips after each line](docs/screenshots/trace.png) | **She traces your code like a debugger.** "What does this return?" — her cursor skims each line as it runs while she says what happens, and the values appear just after the line's end in small chips. When a line runs again (here the recursive call, `n = 2` → `n = 1`), its value updates in place. |
 | ![Student circles a line while asking](docs/screenshots/draw-and-ask.png) | **Ask by drawing.** Hold ⌃⌥, talk, and circle something (a click is a dot). Your orange marks, a zoomed crop and your words go to her as one question. |
 | ![One-line step card](docs/screenshots/step-line.png) | **Step by step.** She points at the next thing to click and waits until you do it; the checklist is one line until a step changes or you rest your pointer on it. |
 | ![Pointing-accuracy test results](docs/screenshots/pointing-test.png) | **Pointing accuracy check** (Setup & checks). Labelled buttons on every display, each found on a real capture and scored in pixels. |
@@ -144,7 +149,7 @@ take over your screen for ~15 minutes; use the in-app checks instead (Setup & ch
 Run through this once with your key (the real tutor) — it takes about 15 minutes. Without a key
 the demo tutor follows a script instead: the same features happen, in this order, each time you
 say something or release the ask keys (the first one shows her pointing gestures, the second her
-pen).
+pen, the third a trace).
 
 **Before you start:** add COMP 1405 and link a folder that has a few lecture slides/PDFs (the
 generated test course works too: `node -e "import('./test/fixtures/make-course.mjs').then(m=>m.makeCourseFolder('/tmp/comp1405'))"`
@@ -184,8 +189,14 @@ then link `/tmp/comp1405`). Open some code or a slide on screen.
    arrow or box** in Tuple's flat brush, every one a little different and drawn at a human pace
    — or **types a short note** letter by letter. All in time with her voice.
    *(Prefer handwriting? Settings → Cursor & ink → Ada writes notes → Handwritten.)*
-3. Ask "clear that" (or ⌃⌥C).
-4. **Setup & checks → Pointing accuracy → Start test** (during a session): labelled buttons appear
+3. Open some code (say a recursive `factorial`) and ask "what does `factorial(3)` return?". She
+   **traces it**: her cursor steps onto each line as it runs while she says what happens, and the
+   values appear in small chips right after each line — `n = 3`, `3 == 0 → False`,
+   `3 * factorial(2)` — updating in place when the function is called again. *(In demo mode it's
+   the third thing you say; without a key she can't read your code, so the chips land in the
+   middle of the screen.)*
+4. Ask "clear that" (or ⌃⌥C).
+5. **Setup & checks → Pointing accuracy → Start test** (during a session): labelled buttons appear
    on every display, she finds each on a real screenshot and you see how many pixels off she was.
    **Settings → Cursor & ink → Preview on screen** shows every mark kind without using the API.
 

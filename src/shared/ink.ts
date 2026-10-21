@@ -37,8 +37,16 @@ export interface InkItem {
   text?: string;
   num?: number;
   fontSize?: number;
-  /** Text: typed in the system font (default, like Tuple) or handwritten. */
-  font?: 'system' | 'hand';
+  /** Text: typed in the system font (default, like Tuple), handwritten, or monospaced (values). */
+  font?: 'system' | 'hand' | 'mono';
+  /**
+   * Text: a value chip, the way a debugger shows values inline: white text typed onto a pill in
+   * the item's colour, at the end of a line of code ("n = 3"). A newer chip on the same line
+   * replaces it.
+   */
+  chip?: boolean;
+  /** Fade-out length in ms when it's replaced rather than faded with its turn (default FADE_MS). */
+  fadeMs?: number;
   /** Text: 'center' = `at` is the centre of the first line (diagram labels). */
   align?: 'center';
   width?: number;

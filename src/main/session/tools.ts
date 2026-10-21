@@ -78,6 +78,21 @@ export const TOOL_DECLARATIONS = [
     ),
   },
   {
+    name: 'trace_code',
+    description:
+      'Step through code on the student\'s screen like a debugger: as you narrate, your cursor goes to each line as it runs and the values right after it appear beside that line ("n = 3", "returns 6"), updating in place when they change. Use it when they ask what code does or returns, what a variable is at some point, why it prints something, or how a loop or recursion unfolds. A model works the trace out from a full-resolution screenshot and returns the lines to say; say them in order, essentially word for word. Say a few words while it prepares ("let\'s trace it").',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        question: S('What the student wants to understand, in their words.'),
+        input: S('The input to trace with, e.g. "factorial(3)" or "nums = [4, 1, 3]" (optional; a small typical one is chosen otherwise).'),
+        focus: S('Optional: which code, e.g. "the factorial function on the left".'),
+        steps: I('Roughly how many steps to show, 3–10 (default 6).'),
+      },
+      ['question'],
+    ),
+  },
+  {
     name: 'clear_drawings',
     description: 'Erase drawings on screen (yours, the student\'s, or all) — do this when you move on to a new point.',
     behavior: 'NON_BLOCKING',

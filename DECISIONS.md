@@ -310,3 +310,27 @@ a downloaded app would be quarantined, and building locally is one command.
 packaged app has its own ("Pairwise Safe Storage") and can't decrypt it. The settings service
 now reports such a key as `unreadable`; the hub opens on Settings → Gemini, explains why, and
 the sidebar says the key needs pasting again. Until then the demo tutor runs.
+
+## Polish after round 2
+
+### D-037 · Tracing code like a debugger (`trace_code`)
+A new tool for "what does this code actually do": a vision model (the explanation planner in a
+`trace` mode, with medium thinking because the values must be right) reads the code on a
+full-resolution capture and returns up to ten steps in execution order. Each step is one spoken
+sentence plus the line being run and the values right after it runs. As each sentence is heard
+(BeatSync, as for `explain_on_screen`), Ada's cursor skims briskly under that line (~560 px/s,
+at most 0.75 s) and types a **value chip** just after where the line's text ends: white
+monospaced text on a small pill in her colour ("n = 3", "returns 6"), like a debugger's inline
+values. A newer value on the same line replaces the chip there (the old one fades in 180 ms just
+before the new one is typed), so a loop or a recursive call updates in place. Chips are sized
+from the code's line height (10.5–14.5 px text) so chips on neighbouring lines never touch, and
+type at ~0.55× a note's key time. If the speech gets ahead of the cursor, it skips the skim and
+goes straight to the value. Where the text really ends comes from the capture's pixels
+(`lineEnd`: the last glyph run that starts in the line's box, ignoring a neighbour's ascenders
+and Pairwise's own cursor), because model boxes are often a little short or long. Nothing else
+is drawn. Chips fade with the turn's other marks. The demo tutor has a "what does this code do?"
+turn. The OCR stand-in used by the tests now skips bare symbols ("==") when matching a quoted
+line, and treats words Tesseract put on separate lines as one row when they sit side by side.
+Considered: drawing values as typed notes (they read as commentary, not state), a separate
+panel with a trace table (takes the student's eyes off their code), and keeping a history on
+each chip ("i = 0 → 1 → 2"; long and noisy; the spoken trace carries the history).

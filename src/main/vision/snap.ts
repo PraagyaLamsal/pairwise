@@ -147,3 +147,77 @@ function backgroundAround(img: Bitmap, b: PxBox): [number, number, number] | nul
   if (!best || best.n < total * 0.4) return null;
   return [best.r / best.n, best.g / best.n, best.b / best.n];
 }
+
+/**
+ * Where a line of text really ends (pixel x, exclusive): the right edge of the glyphs that start
+ * inside `box`, following them past its right edge if they run on, and stopping at the first gap
+ * wider than ~3 characters that starts beyond it. A value chip then sits just after the code,
+ * even when a vision model's box for the line is a little short or runs on past it.
+ */
+export function lineEnd(img: Bitmap, box: PxBox, opts: { threshold?: number; reach?: number; ignore?: PxBox[] } = {}): number | null {
+  const W = img.width;
+  const H = img.height;
+  const y1 = Math.max(0, Math.round(box.y1));
+  const y2 = Math.min(H, Math.round(box.y2));
+  const x1 = Math.max(0, Math.round(box.x1));
+  const x2 = Math.min(W, Math.round(box.x2));
+  const th = y2 - y1;
+  if (th < 4 || x2 - x1 < 2) return null;
+  const reach = Math.min(W, x2 + (opts.reach ?? Math.max(160, th * 10)));
+  // The middle of the line only: a neighbouring line's ascenders and descenders stay out.
+  const r1 = y1 + Math.floor(th * 0.2);
+  const r2 = Math.max(r1 + 1, y2 - Math.floor(th * 0.2));
+  const d = img.data;
+  const counts = new Map<number, { n: number; r: number; g: number; b: number }>();
+  // The background: the commonest colour in the line's band and in the leading just above and
+  // below it (dense text alone could outnumber it).
+  const rows: number[] = [];
+  for (let y = r1; y < r2; y++) rows.push(y);
+  for (const y of [y1 - 2, y1 - 1, y2, y2 + 1]) if (y >= 0 && y < H) rows.push(y, y);
+  for (const y of rows) {
+    for (let x = x1; x < reach; x += 2) {
+      const i = (y * W + x) * 4;
+      const key = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+      const c = counts.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+      c.n++;
+      c.r += d[i];
+      c.g += d[i + 1];
+      c.b += d[i + 2];
+      counts.set(key, c);
+    }
+  }
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  let total = 0;
+  for (const c of counts.values()) {
+    total += c.n;
+    if (!best || c.n > best.n) best = c;
+  }
+  if (!best || best.n < total * 0.4) return null;
+  const bg = [best.r / best.n, best.g / best.n, best.b / best.n];
+  const threshold = opts.threshold ?? 60;
+  // Pairwise's own cursor or cards, where the capture includes them (Linux): not the line.
+  const ignore = (opts.ignore ?? []).filter((g) => g.y2 > r1 && g.y1 < r2);
+  const inkAt = (x: number) => {
+    const skip = ignore.filter((g) => x >= g.x1 && x < g.x2);
+    for (let y = r1; y < r2; y++) {
+      if (skip.length && skip.some((g) => y >= g.y1 && y < g.y2)) continue;
+      const i = (y * W + x) * 4;
+      if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > threshold) return true;
+    }
+    return false;
+  };
+  const gapMax = Math.max(8, Math.round(th * 1.6));
+  let end = -1;
+  let gap = 0;
+  for (let x = x1; x < reach; x++) {
+    if (inkAt(x)) {
+      end = x + 1;
+      gap = 0;
+      continue;
+    }
+    gap++;
+    // A wide gap after the box: the line is over (inside it, it's alignment, unless very wide).
+    if (end >= 0 && gap >= gapMax && (x - gap + 1 >= x2 || gap >= gapMax * 3)) break;
+  }
+  return end >= 0 ? end : null;
+}

@@ -9,7 +9,7 @@ import { BeatSync } from '../beat-sync';
 import { GeminiBackend, Grounder, OcrBackend, type FrameSource, type GroundTarget, type GroundingBackend } from '../../vision/grounder';
 import { ScreenReader } from '../../vision/reader';
 import { decodeFrame, resizeFrame } from '../../vision/decode';
-import { namesControl } from '../../vision/snap';
+import { lineEnd, namesControl, type Bitmap } from '../../vision/snap';
 import { ExplanationPlanner, type PlannedBeat, type PlannedMark } from '../../vision/planner';
 import type { CursorStep } from '../cursor';
 import { env } from '../../env';
@@ -147,8 +147,11 @@ export class VisualFeature {
     const now = Date.now();
     const steps: CursorStep[] = [];
     const traceIndex = new Map<InkItem, number>();
+    // A trace that has fallen behind the speech skips the skim and goes straight to the value.
+    const behind = this.s.cursor.busyUntil > Math.max(now, at) + 250;
     for (const s of seq) {
       if ('gesture' in s) {
+        if (behind && s.gesture.style === 'run_line') continue;
         steps.push(...gestureSteps(s.gesture));
         continue;
       }
@@ -172,6 +175,7 @@ export class VisualFeature {
       }
     }
     if (!items.length) return;
+    this.replaceChips(items);
     const g = items[0].group ?? this.group();
     const list = this.turnInk.get(g) ?? [];
     list.push(...items.map((i) => i.id));
@@ -183,6 +187,42 @@ export class VisualFeature {
     keep.push(...items.map((i) => ({ ...i })));
     this.replayable.set(g, keep);
     if (this.replayable.size > 4) this.replayable.delete(this.replayable.keys().next().value as string);
+  }
+
+  /**
+   * A new value on a line replaces the chip already there, like a debugger updating an inline
+   * value: the old one goes quickly just as the new one starts to be typed.
+   */
+  private replaceChips(items: InkItem[]): void {
+    const gone = replacedChips(this.s.ink.all(), items, Date.now());
+    if (gone.length) this.s.ink.update(gone);
+  }
+
+  /**
+   * Where lines of text in `frame` really end (global DIP x), from its pixels: value chips sit
+   * just after the code. Pairwise's own cursor and cards are ignored where the capture has them.
+   */
+  lineEnds(frame: EncodedFrame): (line: Rect) => number | undefined {
+    let img: Bitmap | null | undefined;
+    const reg = frame.ref.region;
+    const p = this.s.cursor.position;
+    const own = [{ x: p.x - 4, y: p.y - 4, width: 30, height: 34 }, { x: p.x + 10, y: p.y + 18, width: 230, height: 34 }, ...this.s.overlays.uiRects()];
+    return (line) => {
+      if (img === undefined) {
+        try {
+          img = decodeFrame(frame);
+        } catch (e) {
+          log.debug('frame decode failed', e);
+          img = null;
+        }
+      }
+      if (!img) return undefined;
+      const sx = img.width / reg.width;
+      const sy = img.height / reg.height;
+      const px = (r: Rect) => ({ x1: (r.x - reg.x) * sx, y1: (r.y - reg.y) * sy, x2: (r.x + r.width - reg.x) * sx, y2: (r.y + r.height - reg.y) * sy });
+      const end = lineEnd(img, px(line), { ignore: own.map(px) });
+      return end === null ? undefined : reg.x + end / sx;
+    };
   }
 
   /**
@@ -423,9 +463,76 @@ export class VisualFeature {
       };
     });
 
+    t.register('trace_code', async (args, _call, signal) => {
+      const question = str(args.question) || 'What does this code do, step by step?';
+      const display = this.displayFor(args);
+      this.s.cursor.setActivity('thinking', 'tracing…');
+      const idle = () => this.s.cursor.setActivity(this.s.snapshot.activity === 'speaking' ? 'speaking' : 'idle');
+      const frame = await this.frames.capture(display.id, { maxWidth: 2048 });
+      if (!frame) {
+        idle();
+        return { response: { ok: false, note: 'Could not see the screen — trace it in words.' } };
+      }
+      let beats: TraceBeat[] = [];
+      try {
+        if (Array.isArray(args.script)) beats = await this.scriptedTrace(args.script as Record<string, unknown>[], frame, display, signal);
+        else {
+          const planned = this.planner.available
+            ? (await this.planner.plan({ ...this.planContext(), frame, question, focus: str(args.focus) || undefined, lines: num(args.steps) ?? 6, mode: 'trace', input: str(args.input) || undefined }, signal)).beats
+            : demoTrace();
+          const ends = this.lineEnds(frame);
+          beats = planned.map((b) => ({ say: b.say, seq: beatSequence(b.marks, frame, display.bounds, this.style(), ends, true) }));
+        }
+      } catch (e) {
+        log.warn('trace_code planning failed', e);
+        beats = [];
+      }
+      idle();
+      if (signal.aborted) return { response: { ok: false } };
+      if (!beats.length) return { response: { ok: false, note: 'Could not trace it on screen. Trace it in words, using point_at on each line.' } };
+      this.scheduleSequences(beats);
+      return {
+        response: {
+          ok: true,
+          script: beats.map((b) => b.say),
+          how: 'Say these lines now, in order, essentially word for word (small natural changes are fine). As you say each one, your cursor goes to that line and its values appear beside it. Then check in with them.',
+        },
+        scheduling: 'WHEN_IDLE',
+      };
+    });
+
     t.register('celebrate', async (args) => {
       this.celebrate(str(args.message) || 'nice!');
       return { response: { ok: true } };
+    });
+  }
+
+  /**
+   * A trace given step by step (the demo script and tests): each step names its line by its text
+   * (grounded precisely) or by `box` in the latest frame, optionally with the value to show.
+   */
+  private async scriptedTrace(script: Record<string, unknown>[], frame: EncodedFrame, display: DisplayInfo, signal: AbortSignal): Promise<TraceBeat[]> {
+    const steps = script.filter((st) => st && str(st.say)).slice(0, 12);
+    const targets: GroundTarget[] = [];
+    steps.forEach((st, i) => {
+      // The line's own text, quoted, so it's found as a whole line and not by one of its words.
+      const text = str(st.line);
+      if (text && !Array.isArray(st.box)) targets.push({ id: `l${i}`, description: /["“]/.test(text) ? text : `the line "${text}"`, precise: true });
+    });
+    const found = targets.length ? await this.grounder.locate(display.id, targets, this.s.modelFrame, signal) : [];
+    const ends = this.lineEnds(frame);
+    const ref = this.s.modelFrame ?? frame.ref;
+    return steps.map((st, i) => {
+      const box = Array.isArray(st.box) && st.box.length === 4 ? box2dToGlobal(ref, st.box as Box2D) : undefined;
+      const rect = found.find((f) => f.id === `l${i}` && f.found)?.rect ?? box;
+      const seq: BeatStep[] = [];
+      if (rect) {
+        const style = str(st.style);
+        seq.push({ gesture: { style: style === 'hover' || style === 'follow_line' ? style : 'run_line', rect } });
+        const value = str(st.value);
+        if (value) for (const ink of buildInk([{ kind: 'value', rect, text: value, endX: ends(rect) }], display.bounds, this.style())) seq.push({ ink });
+      }
+      return { say: str(st.say), seq };
     });
   }
 
@@ -465,15 +572,19 @@ export class VisualFeature {
 
   /** Turn planned beats into cursor moves and ink, fired by a BeatSync as each line is spoken. */
   scheduleBeats(beats: PlannedBeat[], frame: EncodedFrame, display: DisplayInfo): void {
-    const seqs = beats.map((b) => beatSequence(b.marks, frame, display.bounds, this.style()));
+    const ends = this.lineEnds(frame);
+    this.scheduleSequences(beats.map((b) => ({ say: b.say, seq: beatSequence(b.marks, frame, display.bounds, this.style(), ends) })));
+  }
+
+  /** Located beats: each one's moves and marks start as its words are heard. */
+  scheduleSequences(beats: TraceBeat[]): void {
     const sync = new BeatSync(
-      beats.map((b, i) => ({
+      beats.map((b) => ({
         text: b.say,
         start: (pos: number) => {
-          const seq = seqs[i];
-          if (!seq.length) return;
-          for (const s of seq) if ('ink' in s) s.ink.group = this.group();
-          this.perform(seq, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS);
+          if (!b.seq.length) return;
+          for (const s of b.seq) if ('ink' in s) s.ink.group = this.group();
+          this.perform(b.seq, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS);
         },
       })),
     );
@@ -512,17 +623,49 @@ export class VisualFeature {
 const GESTURES = new Set<string>(['hover', 'follow_line', 'sweep']);
 
 /**
+ * Value chips that `fresh` chips replace (same line, drawn later): copies set to fade out
+ * quickly just before the new value starts to be typed.
+ */
+export function replacedChips(live: InkItem[], fresh: InkItem[], now: number): InkItem[] {
+  const chips = fresh.filter((i) => i.chip && i.at);
+  if (!chips.length) return [];
+  const gone: InkItem[] = [];
+  for (const old of live) {
+    if (!old.chip || !old.at || old.author !== 'tutor' || chips.includes(old)) continue;
+    const by = chips.find((n) => Math.abs(n.at!.y - old.at!.y) <= 6 && Math.abs(n.at!.x - old.at!.x) < 240 && n.revealAt > old.revealAt);
+    if (!by) continue;
+    const at = Math.max(now, by.revealAt - 60);
+    if (old.fadeAt != null && old.fadeAt <= at) continue;
+    gone.push({ ...old, fadeAt: at, fadeMs: 180 });
+  }
+  return gone;
+}
+
+/** One thing a beat does: a pointer gesture or a mark. */
+export type BeatStep = { ink: InkItem } | { gesture: Gesture };
+
+/** A beat with everything located: what to say, and what happens as it is said. */
+export interface TraceBeat {
+  say: string;
+  seq: BeatStep[];
+}
+
+/**
  * One beat's marks, in order, as things to do: pointer gestures (located in global DIP) and ink
  * items. Order is kept, so "follow this line, then circle that word" happens that way round.
+ * `lineEndAt` finds where a line's text ends (value chips go just after it); `brisk` is a trace.
  */
-export function beatSequence(marks: PlannedMark[], frame: EncodedFrame, display: Rect, style: MarkStyle): ({ ink: InkItem } | { gesture: Gesture })[] {
-  const out: ({ ink: InkItem } | { gesture: Gesture })[] = [];
+export function beatSequence(marks: PlannedMark[], frame: EncodedFrame, display: Rect, style: MarkStyle, lineEndAt?: (line: Rect) => number | undefined, brisk = false): BeatStep[] {
+  const out: BeatStep[] = [];
   for (const m of marks) {
     if (GESTURES.has(m.kind)) {
-      if (m.box_2d?.length === 4) out.push({ gesture: { style: m.kind as GestureStyle, rect: box2dToGlobal(frame.ref, m.box_2d as Box2D) } });
+      // In a trace, the cursor steps briskly onto each line it runs rather than reading it out.
+      const kind = brisk && (m.kind === 'follow_line' || m.kind === 'hover') ? 'run_line' : (m.kind as GestureStyle);
+      if (m.box_2d?.length === 4) out.push({ gesture: { style: kind, rect: box2dToGlobal(frame.ref, m.box_2d as Box2D) } });
       continue;
     }
     const spec = planToSpec(m, frame);
+    if (spec?.kind === 'value' && spec.rect) spec.endX = lineEndAt?.(spec.rect);
     if (spec) for (const ink of buildInk([spec], display, style)) out.push({ ink });
   }
   return out;
@@ -541,6 +684,8 @@ export function planToSpec(m: PlannedMark, frame: EncodedFrame): MarkSpec | null
     case 'check':
     case 'cross':
       return { kind: m.kind, rect, at: pt, num: m.number, label: m.label };
+    case 'value':
+      return rect && m.text ? { kind: 'value', rect, text: m.text } : null;
     case 'hover':
     case 'follow_line':
     case 'sweep':
@@ -548,6 +693,17 @@ export function planToSpec(m: PlannedMark, frame: EncodedFrame): MarkSpec | null
     default:
       return rect ? { kind: m.kind, rect: rect.width < 4 || rect.height < 4 ? inflateRect(rect, 6) : rect, label: m.label } : null;
   }
+}
+
+/** Demo mode (no key): a fixed little trace in the middle of the screen, to show what it looks like. */
+export function demoTrace(): PlannedBeat[] {
+  const line = (k: number): number[] => [400 + k * 45, 300, 432 + k * 45, 560 - (k % 2) * 90];
+  return [
+    { say: 'In demo mode I can\'t read your code, but here\'s how I trace it, like a debugger.', marks: [{ kind: 'follow_line', box_2d: line(0) }, { kind: 'value', box_2d: line(0), text: 'n = 3' }] },
+    { say: 'My cursor goes to each line as it runs,', marks: [{ kind: 'follow_line', box_2d: line(1) }, { kind: 'value', box_2d: line(1), text: '3 == 0 → False' }] },
+    { say: 'and the values show up right beside it.', marks: [{ kind: 'follow_line', box_2d: line(2) }, { kind: 'value', box_2d: line(2), text: 'n * factorial(2)' }] },
+    { say: 'When a value changes, it updates in place.', marks: [{ kind: 'hover', box_2d: line(0) }, { kind: 'value', box_2d: line(0), text: 'n = 2' }] },
+  ];
 }
 
 /** Demo mode (no key): a fixed little explanation in the middle of the screen. */

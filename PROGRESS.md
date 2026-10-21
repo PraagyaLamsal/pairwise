@@ -142,6 +142,11 @@ Also found and fixed this round: the OCR grounder's parallel tesseract passes st
 moving (main and overlay); the test harness's screen captures sometimes contained a stale copy
 of the overlay.
 
+## After round 2 — polish
+| Feature | Status | How it was checked |
+|---|---|---|
+| **Trace code like a debugger** (`trace_code`): the cursor steps through the lines as they run, value chips appear after each line and update in place | ✅ 🍎 | unit (`trace.test.ts`): chip placement just after the line's end, centred, sized from the line, kept on screen; typed onto a growing pill in white monospace; a newer value on the same line replaces the old chip (fast fade) and only that one; where a line really ends, found from pixels (tight, short and long boxes, aligned comments, a neighbour's ascenders, our own cursor); the planner's trace mode (medium thinking, ≤ 10 steps, empty values dropped). e2e 13 (1×, 2×): a five-step trace of `factorial(2)` grounded on real code: one chip per step on the right line, 9–11 px after the text, drawn where planned (rendered pixels), `n = 2` → `n = 1` in place, every value typed by the cursor after its words are heard, the cursor skims each line first unless the speech has moved on, and the last value is done before Ada stops talking. Real Gemini traces need your key |
+
 ## Final verification
 The full run on 2026-10-21 (round 2) started from a clean build, with out/ and dist/ removed.
 

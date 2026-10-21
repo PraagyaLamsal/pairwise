@@ -95,6 +95,13 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
         ],
       },
       {
+        heard: '(demo) what does this code do?',
+        segments: [
+          { say: 'Let\'s trace it, one line at a time.' },
+          { tool: 'trace_code', args: { question: 'what does this code do?', input: 'factorial(3)' } },
+        ],
+      },
+      {
         heard: '(demo) what does my course say about this?',
         segments: [
           { say: 'Let me check your course material first.' },
@@ -163,6 +170,12 @@ export class MockLiveServer {
     private readonly speed = 2,
   ) {
     this.script = demoScript(tutorName);
+    if (this.scripted) {
+      // Like the real model: say the script a walkthrough or trace hands back, line by line.
+      const sayScript = (r: Record<string, unknown>): MockTurn | null => (Array.isArray(r.script) && r.script.length ? { segments: r.script.map((say) => ({ say: String(say) })) } : null);
+      this.afterTool.set('explain_on_screen', sayScript);
+      this.afterTool.set('trace_code', sayScript);
+    }
   }
 
   async start(port = 0): Promise<string> {

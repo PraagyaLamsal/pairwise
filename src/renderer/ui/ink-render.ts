@@ -1,6 +1,6 @@
 import type { Point, Rect } from '@shared/geometry';
 import type { InkItem } from '@shared/ink';
-import { HAND_FONT, HAND_WEIGHT, NOTE_FONT, NOTE_WEIGHT, inkShapes, partial, penStateAt, polyLength, rng, smoothPath } from '@shared/ink-geometry';
+import { CHIP_FONT_SIZE, HAND_FONT, HAND_WEIGHT, MONO_FONT, MONO_WEIGHT, NOTE_FONT, NOTE_WEIGHT, chipBox, inkShapes, partial, penStateAt, polyLength, rng, smoothPath } from '@shared/ink-geometry';
 
 export { rng };
 
@@ -10,6 +10,7 @@ export { rng };
  * midpoint-smoothed curves, no glow and no pressure. Marks are revealed as the pen moves
  * (src/shared/ink-geometry.ts decides when each stroke is drawn, so the cursor stays on the
  * pen); notes are typed in the system font with a caret, or handwritten if the student prefers.
+ * Values beside code are chips: monospaced white text typed onto a pill in the tutor's colour.
  */
 
 export const FADE_MS = 650;
@@ -77,7 +78,7 @@ export class InkRenderer {
 
   /** Whether any item is still animating (drawing in, popping, pulsing or fading) at `now`. */
   animating(items: InkItem[], now: number): boolean {
-    return items.some((i) => now < i.revealAt + i.drawMs + 450 || (i.fadeAt != null && now < i.fadeAt + FADE_MS) || (i.kind === 'ring' && (i.fadeAt == null || now < i.revealAt + RING_PULSES_MS)));
+    return items.some((i) => now < i.revealAt + i.drawMs + 450 || (i.fadeAt != null && now < i.fadeAt + (i.fadeMs ?? FADE_MS)) || (i.kind === 'ring' && (i.fadeAt == null || now < i.revealAt + RING_PULSES_MS)));
   }
 
   private shapes(item: InkItem): Point[][] {
@@ -92,14 +93,15 @@ export class InkRenderer {
   render(ctx: CanvasRenderingContext2D, items: InkItem[], now: number, dpr: number): void {
     for (const item of items) {
       if (now < item.revealAt) continue;
-      const fade = item.fadeAt != null ? Math.max(0, 1 - (now - item.fadeAt) / FADE_MS) : 1;
+      const fade = item.fadeAt != null ? Math.max(0, 1 - (now - item.fadeAt) / (item.fadeMs ?? FADE_MS)) : 1;
       if (fade <= 0) continue;
       const ms = now - item.revealAt;
       ctx.save();
       ctx.globalAlpha = fade;
       switch (item.kind) {
         case 'text':
-          this.drawText(ctx, item, ms, dpr);
+          if (item.chip) this.drawChip(ctx, item, ms, dpr);
+          else this.drawText(ctx, item, ms, dpr);
           break;
         case 'step':
           this.drawStep(ctx, item, ms, dpr);
@@ -203,6 +205,45 @@ export class InkRenderer {
     roundRect(ctx, o.x - 6, o.y - 5, Math.max(size, boxW) + 14, lineH * Math.max(1, shownLines) + 8, 6);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  /**
+   * A value chip: the pill grows under the caret as the value is typed onto it, like a
+   * debugger's inline value appearing at the end of a line.
+   */
+  private drawChip(ctx: CanvasRenderingContext2D, item: InkItem, ms: number, dpr: number): void {
+    if (!item.at || !item.text) return;
+    const size = item.fontSize ?? CHIP_FONT_SIZE;
+    const st = penStateAt(item, ms);
+    const chars = [...item.text];
+    const k = Math.max(0, Math.min(chars.length, st.chars));
+    const b = chipBox(item, k)!;
+    // The pill pops in as the first key is pressed, then keeps up with the text.
+    const pop = Math.min(1, ms / 140);
+    ctx.globalAlpha *= 0.35 + 0.65 * pop;
+    ctx.shadowColor = SHADOW;
+    ctx.shadowBlur = 2 * dpr;
+    ctx.shadowOffsetY = 0.5 * dpr;
+    ctx.fillStyle = item.color;
+    roundRect(ctx, b.x, b.y, b.width, b.height, Math.min(6, b.height / 2));
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.font = `${MONO_WEIGHT} ${size}px ${MONO_FONT}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    const padX = size * 0.52;
+    const shown = chars.slice(0, k).join('');
+    const y = b.y + b.height / 2 + 0.5;
+    ctx.fillText(shown, b.x + padX, y);
+    if (ms < item.drawMs + 420) {
+      const blink = ms < item.drawMs || Math.floor(ms / 260) % 2 === 0;
+      const a = ms < item.drawMs ? 1 : Math.max(0, 1 - (ms - item.drawMs) / 420);
+      if (blink && a > 0) {
+        ctx.globalAlpha *= a;
+        ctx.fillRect(b.x + padX + ctx.measureText(shown).width + 1, y - size * 0.56, 1.5, size * 1.12);
+      }
+    }
   }
 
   private drawStep(ctx: CanvasRenderingContext2D, item: InkItem, ms: number, dpr: number): void {
@@ -313,6 +354,7 @@ export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
 /** Bounds of an item (notes thumbnails, hit tests). */
 export function inkBounds(item: InkItem): Rect | null {
   if (item.rect) return { ...item.rect };
+  if (item.kind === 'text' && item.chip) return chipBox(item);
   if (item.points?.length) {
     const xs = item.points.map((p) => p.x);
     const ys = item.points.map((p) => p.y);

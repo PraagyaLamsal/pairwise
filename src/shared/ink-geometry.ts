@@ -403,6 +403,11 @@ export const NOTE_WEIGHT = 600;
 /** Handwritten notes (Settings → Ada writes notes → Handwritten). */
 export const HAND_FONT = "'Caveat', 'Bradley Hand', cursive";
 export const HAND_WEIGHT = 700;
+/** Values beside code (trace chips): the Mac's code font, like a debugger's inline values. */
+export const MONO_FONT = "ui-monospace, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace";
+export const MONO_WEIGHT = 600;
+/** Advance width of the monospaced fonts above, in em. */
+const MONO_EM = 0.602;
 
 // Advance widths in em, measured from Inter 600 (a close stand-in for SF Pro Text Semibold) and
 // Caveat 700 in Chromium. Classes rather than every glyph: good to a few percent on phrases.
@@ -427,6 +432,7 @@ function charEm(ch: string, t: typeof SYS): number {
 
 /** Estimated width of a single line of note text (px). `font` defaults to the typed system font. */
 export function approxTextWidth(text: string, fontSize: number, font: InkItem['font'] = 'system'): number {
+  if (font === 'mono') return Math.max(fontSize * 0.6, [...text].length * MONO_EM * fontSize);
   const table = font === 'hand' ? HAND : SYS;
   let em = 0;
   for (const ch of text) em += charEm(ch, table);
@@ -455,6 +461,24 @@ export function typingPlan(text: string, seed: number): number[] {
     t += d;
   });
   return out;
+}
+
+/** Size of a value chip's text (DIP). */
+export const CHIP_FONT_SIZE = 13.5;
+
+/**
+ * A value chip's pill (`at` is its top-left corner) for `chars` characters of its text (all of
+ * it by default): the pill grows as the value is typed onto it.
+ */
+export function chipBox(item: Pick<InkItem, 'at' | 'text' | 'fontSize'>, chars?: number): Rect | null {
+  if (!item.at) return null;
+  const size = item.fontSize ?? CHIP_FONT_SIZE;
+  const text = [...(item.text ?? '')];
+  const shown = chars === undefined ? text.length : Math.max(0, Math.min(text.length, chars));
+  const h = Math.round(size * 1.62);
+  const padX = size * 0.52;
+  const w = Math.max(h, shown * MONO_EM * size + padX * 2);
+  return { x: item.at.x, y: item.at.y, width: w, height: h };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -523,7 +547,7 @@ const timingCache = new WeakMap<InkItem, PenTiming>();
 
 function signature(it: InkItem): string {
   const r = it.rect;
-  return `${it.kind}|${it.seed}|${r ? `${r.x},${r.y},${r.width},${r.height}` : ''}|${it.from?.x},${it.from?.y}|${it.to?.x},${it.to?.y}|${it.at?.x},${it.at?.y}|${it.fontSize}|${it.text}|${it.points?.length}|${it.bend}|${it.font}`;
+  return `${it.kind}|${it.seed}|${r ? `${r.x},${r.y},${r.width},${r.height}` : ''}|${it.from?.x},${it.from?.y}|${it.to?.x},${it.to?.y}|${it.at?.x},${it.at?.y}|${it.fontSize}|${it.text}|${it.points?.length}|${it.bend}|${it.font}|${it.chip ? 1 : 0}`;
 }
 
 /** Turning per pixel around each point, spread over ~3 neighbours either side. */
@@ -576,7 +600,8 @@ function timingFor(item: InkItem): PenTiming {
     const text = item.text ?? '';
     if (item.font === 'hand') t = { sig, strokes: [], natural: Math.max(300, (240 + [...text].length * 55) * 1.3) };
     else {
-      const keys = typingPlan(text, item.seed);
+      // A value is typed briskly (it's short and the trace moves on); a note at a person's pace.
+      const keys = typingPlan(text, item.seed).map((k) => (item.chip ? k * 0.55 : k));
       t = { sig, strokes: [], natural: (keys[keys.length - 1] ?? 0) + 90, keys };
     }
   } else if (item.kind === 'step') t = { sig, strokes: [], natural: 550 };
@@ -604,6 +629,7 @@ export function drawDurationFor(item: InkItem): number {
   const t = timingFor(item);
   // Diagram labels on the whiteboard are typed briskly (a diagram has many of them).
   if (item.kind === 'text' && item.surface === 'whiteboard') return Math.round(Math.min(900, Math.max(240, t.natural * 0.6)));
+  if (item.kind === 'text' && item.chip) return Math.round(Math.min(1600, Math.max(260, t.natural)));
   if (item.kind === 'text') return Math.round(Math.min(item.font === 'hand' ? 2100 : 3800, Math.max(260, t.natural)));
   if (item.kind === 'step' || item.kind === 'ring') return Math.round(t.natural);
   return Math.round(Math.min(1900, Math.max(420, t.natural)));
@@ -656,6 +682,11 @@ function pointAtArc(st: Omit<StrokeTiming, 't0' | 't1'>, s: number): Point {
 /** Where a typed note's writer "clicked" to place it (the cursor rests here while typing). */
 export function textAnchor(item: InkItem): Point | null {
   if (!item.at) return null;
+  if (item.chip) {
+    // Clicked just left of where the value goes, like a person adding a note at a line's end.
+    const b = chipBox(item, 0)!;
+    return { x: b.x - 3, y: b.y + b.height * 0.72 };
+  }
   const size = item.fontSize ?? 19;
   const w = approxTextWidth(item.text ?? '', size, item.font);
   const x0 = item.align === 'center' ? item.at.x - w / 2 : item.at.x;

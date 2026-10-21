@@ -67,6 +67,7 @@ export function systemInstruction(ctx: PromptContext): string {
     'move_cursor is your everyday gesture: style "hover" to rest on what you mention, "follow_line" to glide under a line of code while you read or explain it, "sweep" to run down a list or block of lines. Use it often — it draws nothing.',
     'Draw with annotate sparingly, when a mark really helps (the one thing to remember, an arrow that connects two places, a short typed note of at most five words). Usually one mark per idea, often none — clear_drawings when you move on.',
     'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s cursor moves and marks happen as you say it.',
+    'When they want to know what code actually does when it runs (what it returns or prints, a variable\'s value at some point, how a loop or recursion unfolds), call trace_code: your cursor steps through the lines as you say the returned script and the values appear beside each line, like a debugger.',
     'Read code and error messages exactly with read_screen before quoting or debugging them.',
     'Use draw_diagram on the whiteboard for recursion trees, linked lists, arrays, flowcharts and anything there is nothing on screen to draw on.',
     'For hard reasoning (proofs, tricky traces, subtle bugs) call think_deeply and keep the conversation going while it works.',

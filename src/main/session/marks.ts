@@ -1,12 +1,15 @@
 import { clampPointInside, inflateRect, intersectRect, rectCenter, type Point, type Rect } from '@shared/geometry';
 import { inkId, seedFrom, type InkItem, type InkKind } from '@shared/ink';
-import { approxTextWidth, drawDurationFor } from '@shared/ink-geometry';
+import { approxTextWidth, CHIP_FONT_SIZE, chipBox, drawDurationFor } from '@shared/ink-geometry';
 
 /** A mark the tutor wants to make, already located on screen (global DIP). */
 export interface MarkSpec {
-  kind: Extract<InkKind, 'circle' | 'underline' | 'highlight' | 'box' | 'bracket' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'ring' | 'line'>;
+  /** `value`: a chip with the values at a line of code (`rect` = the line), like a debugger. */
+  kind: Extract<InkKind, 'circle' | 'underline' | 'highlight' | 'box' | 'bracket' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'ring' | 'line'> | 'value';
   /** What it marks (rect of the target). Arrows point at it; notes sit beside it. */
   rect?: Rect;
+  /** Value chips: where the line's text really ends (from its pixels), if known. */
+  endX?: number;
   /** Explicit position for free-floating notes / badges. */
   at?: Point;
   /** Explicit arrow start (else a clear spot near the target is chosen). */
@@ -106,6 +109,23 @@ export function notePosition(target: Rect, text: string, display: Rect, font: In
   return { x: above.x, y: target.y + target.height + 14 };
 }
 
+/** Gap between the end of a line of code and its value chip. */
+const CHIP_GAP = 14;
+
+/** A value chip's text size: in proportion to the code it sits beside, so chips on neighbouring lines never touch. */
+export function chipFontSize(line: Rect): number {
+  return Math.round(Math.min(14.5, Math.max(10.5, line.height * 0.62)) * 2) / 2;
+}
+
+/** Where a value chip goes (its top-left): just after the end of the line, centred on it. */
+export function valuePosition(line: Rect, text: string, display: Rect, endX?: number, fontSize = CHIP_FONT_SIZE): Point {
+  const b = chipBox({ at: { x: 0, y: 0 }, text, fontSize })!;
+  const end = endX !== undefined && endX > line.x ? endX : line.x + line.width;
+  const x = Math.min(end + CHIP_GAP, display.x + display.width - 8 - b.width);
+  const y = Math.min(Math.max(line.y + line.height / 2 - b.height / 2, display.y + 8), display.y + display.height - 8 - b.height);
+  return { x: Math.floor(x), y: Math.round(y) };
+}
+
 /** Turn located mark specs into ink items (geometry + timing fields; revealAt is set later). */
 export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): InkItem[] {
   const out: InkItem[] = [];
@@ -115,7 +135,7 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
     const base: InkItem = {
       id,
       author: style.author,
-      kind: s.kind,
+      kind: s.kind === 'value' ? 'text' : s.kind,
       color: style.color,
       surface: style.surface,
       revealAt: 0,
@@ -157,6 +177,13 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
         if (!text) break;
         const at = s.at ?? (s.rect ? notePosition(s.rect, text, display, style.font) : null);
         if (at) item = { ...base, text, fontSize: noteSize(style.font), font: style.font ?? 'system', at };
+        break;
+      }
+      case 'value': {
+        const text = (s.text ?? '').trim().slice(0, 32);
+        if (!text || !s.rect) break;
+        const fontSize = chipFontSize(s.rect);
+        item = { ...base, text, chip: true, font: 'mono', fontSize, at: valuePosition(s.rect, text, display, s.endX, fontSize) };
         break;
       }
       case 'step': {

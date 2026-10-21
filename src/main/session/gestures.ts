@@ -7,7 +7,7 @@ import { pointTip } from './marks';
  * resting on something while talking about it, gliding under a line while reading it, running
  * down a list line by line — with nothing drawn and no label.
  */
-export type GestureStyle = 'hover' | 'follow_line' | 'sweep';
+export type GestureStyle = 'hover' | 'follow_line' | 'sweep' | 'run_line';
 
 export interface Gesture {
   style: GestureStyle;
@@ -21,6 +21,8 @@ export interface Gesture {
 
 /** Following a line: px/s for ~26 px tall text (bigger text → proportionally faster). */
 export const READ_PX_PER_S = 190;
+/** run_line (a trace stepping onto the line being run): a brisk skim, ~3× reading pace. */
+export const RUN_PX_PER_S = 560;
 /** sweep: time per line (resting on it, then moving down to the next). */
 export const SWEEP_MS_PER_LINE = 640;
 const HOVER_HOLD_MS = 1400;
@@ -74,6 +76,14 @@ export function gestureSteps(g: Gesture): CursorStep[] {
         { kind: 'fly', to: path[0], maxMs: 750 },
         { kind: 'hold', ms: 160 },
         { kind: 'glide', path, ms: followMs(g.rect), style: 'read' },
+      ];
+    }
+    case 'run_line': {
+      // A trace moving onto the next line to run: a quick skim along it, ending where its value goes.
+      const path = followPath(g.rect);
+      return [
+        { kind: 'fly', to: path[0], maxMs: 450 },
+        { kind: 'glide', path, ms: Math.round(Math.min(750, Math.max(280, (g.rect.width / RUN_PX_PER_S) * 1000))), style: 'read' },
       ];
     }
     case 'sweep': {
