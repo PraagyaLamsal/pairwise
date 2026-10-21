@@ -45,6 +45,14 @@ your machine (the README demo script walks through each):
 * round 2: the feel of the idle cursor (35 %) and the proximity fade on a Retina screen;
 * round 2: how often the real Gemini Live model uses `move_cursor` vs `annotate` (the prompt
   asks for gestures first; tell me if it still draws too much);
+* polish: a real **trace** ("what does `factorial(3)` return?") — are the values right, and do
+  the chips land just after your editor's lines? And a few **"Show me"** questions (Settings →
+  Tutor → Quick checks sets how often);
+* polish: the **"Notes saved"** notification after a session (System Settings → Notifications →
+  Pairwise must allow it), **Reduce motion** with the system setting on, and Pairwise's CPU in
+  Activity Monitor during an idle session;
+* polish: a Wi-Fi drop mid-session (turn Wi-Fi off for ~20 s): the pill should say
+  "reconnecting…" and the session continue;
 * real Gemini Live audio (voice, interruption, captions) — needs B-1;
 * ScreenCaptureKit capture with a Retina + external monitor;
 * `Diagnostics → Pointing accuracy` with your key (reports pixel error per display);
