@@ -102,7 +102,7 @@ export class CourseFeature {
       const chunk = this.brain.chunkByCite(course.id, source) ?? this.lastHits.find((h) => h.chunk.cite.toLowerCase().includes(source.toLowerCase()))?.chunk;
       const label = chunk?.cite ?? source;
       const snippet = str(args.snippet) || (chunk ? excerpt(chunk.text, source, 160) : '');
-      this.s.ui.citation = { id: `cite-${Date.now()}`, cite: label, snippet: snippet.slice(0, 220), displayId: this.s.activeDisplayId, until: Date.now() + 9000 };
+      this.s.ui.citation = { id: `cite-${Date.now()}`, cite: label, snippet: snippet.slice(0, 220), displayId: this.s.activeDisplayId, until: Date.now() + 5000 };
       this.s.pushUi();
       this.s.annotateCaption({ cites: [label] });
       return { response: { ok: true, shown: label, ...(chunk ? {} : { note: 'That source was not found in the course index; cite exactly what search_course returned.' }) } };
@@ -112,7 +112,7 @@ export class CourseFeature {
       const topic = str(args.topic);
       if (!topic) return { response: { ok: false } };
       const where = str(args.where);
-      this.s.ui.outOfScope = { id: `scope-${Date.now()}`, topic: where ? `${topic} (usually ${where})` : topic, until: Date.now() + 9000, displayId: this.s.activeDisplayId };
+      this.s.ui.outOfScope = { id: `scope-${Date.now()}`, topic: where ? `${topic} (usually ${where})` : topic, until: Date.now() + 6000, displayId: this.s.activeDisplayId };
       this.s.pushUi();
       this.s.annotateCaption({ outOfScope: where ? `${topic} — usually ${where}` : topic });
       return { response: { ok: true } };

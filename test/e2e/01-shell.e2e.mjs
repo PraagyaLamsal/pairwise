@@ -70,7 +70,7 @@ try {
 
   // HUD exists and shows the course + timer.
   const hud = await windowByRole(app, 'hud');
-  await hud.waitForSelector('.hud .course-code');
+  await hud.waitForSelector('.hud .timer');
   await sleep(2200);
   const timer = await hud.textContent('.timer');
   assert.match(timer, /^0:0[1-9]$/, `timer ticks (${timer})`);

@@ -160,6 +160,8 @@ export interface VeilOutline {
 export interface OverlayUiState {
   driving: boolean;
   drivingLabel?: string;
+  /** The session bar is hidden (⌃⌥H): a tiny "can see" eye stays on screen instead. */
+  hudHidden?: boolean;
   visionDisplayId?: string;
   visionLabel?: string;
   visionPaused: boolean;

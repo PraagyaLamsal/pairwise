@@ -12,39 +12,45 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 8px;
   width: max-content;
 }
+
+/* ---------- the pill ---------- */
+/* Small and quiet, like Tuple's call controls: it shows the essentials and opens on hover. */
 .hud {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 46px;
-  padding: 0 6px 0 4px;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 2px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(30, 35, 45, 0.97), rgba(18, 21, 28, 0.97));
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: rgba(22, 25, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   color: var(--text);
   white-space: nowrap;
+  opacity: 0.62;
+  transition: opacity 260ms ease, border-color 200ms, box-shadow 200ms;
+}
+.hud.loud,
+.hud:hover {
+  opacity: 1;
+  transition: opacity 120ms ease, border-color 200ms, box-shadow 200ms;
 }
 .hud.driving {
   border-color: rgba(255, 178, 36, 0.6);
-  box-shadow: 0 0 0 3px rgba(255, 178, 36, 0.18), 0 12px 34px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px rgba(255, 178, 36, 0.16), 0 6px 18px rgba(0, 0, 0, 0.32);
 }
 .hud.asking {
   border-color: rgba(255, 138, 31, 0.55);
-  box-shadow: 0 0 0 3px rgba(255, 138, 31, 0.16), 0 12px 34px rgba(0, 0, 0, 0.45);
   animation: hud-ask 1.6s ease-in-out infinite;
 }
-.hud.asking .tutor-act {
-  color: #ffb26b;
-}
 @keyframes hud-ask {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 138, 31, 0.14), 0 12px 34px rgba(0, 0, 0, 0.45); }
-  50% { box-shadow: 0 0 0 5px rgba(255, 138, 31, 0.22), 0 12px 34px rgba(0, 0, 0, 0.45); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 138, 31, 0.12), 0 6px 18px rgba(0, 0, 0, 0.32); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 138, 31, 0.2), 0 6px 18px rgba(0, 0, 0, 0.32); }
 }
 @media (prefers-reduced-motion: reduce) {
   .hud.asking { animation: none; }
@@ -52,9 +58,9 @@ body {
 .hud-grip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 12px 0 12px;
+  gap: 7px;
+  height: 30px;
+  padding: 0 8px 0 10px;
   border-radius: 999px;
   cursor: grab;
 }
@@ -62,79 +68,79 @@ body {
   cursor: grabbing;
 }
 .course-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.07);
+}
+.course-dot.pending {
+  animation: pending 1.1s ease-in-out infinite;
+}
+@keyframes pending {
+  50% { opacity: 0.35; }
 }
 .course-code {
-  font-weight: 680;
-  font-size: 13px;
+  font-weight: 650;
+  font-size: 12.5px;
   letter-spacing: -0.01em;
-}
-.rec {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--live);
-  box-shadow: 0 0 8px rgba(240, 78, 94, 0.8);
-  animation: rec 2s ease-in-out infinite;
-}
-.rec.pending {
-  background: var(--warn);
-  box-shadow: 0 0 8px rgba(255, 178, 36, 0.8);
-}
-@keyframes rec {
-  50% {
-    opacity: 0.45;
-  }
 }
 .timer {
   font-variant-numeric: tabular-nums;
   font-weight: 560;
+  font-size: 12.5px;
   color: var(--text-2);
-  min-width: 38px;
+  min-width: 30px;
 }
 .sep {
   width: 1px;
-  height: 20px;
+  height: 16px;
   background: rgba(255, 255, 255, 0.09);
-  margin: 0 4px;
+  margin: 0 3px;
 }
 .mic {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 10px;
+  gap: 5px;
+  height: 26px;
+  padding: 0 7px;
   border-radius: 999px;
   border: none;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
+  color: var(--text-2);
   cursor: pointer;
 }
 .mic:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+.mic.open {
+  color: var(--text);
 }
 .mic.muted {
-  background: rgba(229, 72, 77, 0.16);
+  background: rgba(229, 72, 77, 0.18);
   color: #ff8a8e;
 }
-.mic-bars {
+.mic kbd {
+  opacity: 0.8;
+}
+.mic-bars,
+.tutor-bars {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 16px;
+  height: 13px;
 }
-.mic-bars span {
-  width: 3px;
-  height: 16px;
+.mic-bars span,
+.tutor-bars span {
+  width: 2.5px;
+  height: 13px;
   border-radius: 2px;
   background: var(--student);
   transform-origin: center;
   transition: transform 90ms linear;
 }
-.mic-bars.muted span {
-  background: rgba(255, 255, 255, 0.25);
+.tutor-bars span {
+  background: var(--tutor-hi);
 }
 .mode {
   border: none;
@@ -142,7 +148,7 @@ body {
   color: var(--text-2);
   font-size: 12px;
   font-weight: 560;
-  height: 30px;
+  height: 26px;
   padding: 0 8px;
   border-radius: 8px;
   cursor: pointer;
@@ -152,55 +158,70 @@ body {
 }
 .mode:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 .tutor-state {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 8px;
-  height: 30px;
-  min-width: 150px;
+  justify-content: center;
+  gap: 6px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+}
+.hud.open .tutor-state {
+  justify-content: flex-start;
+  min-width: 136px;
 }
 .tutor-glyph {
-  width: 12px;
-  height: 12px;
-  clip-path: polygon(15% 5%, 95% 50%, 58% 60%, 42% 98%);
-  background: linear-gradient(135deg, #8ab8ff, var(--tutor));
-  filter: drop-shadow(0 0 4px var(--tutor-glow));
+  width: 11px;
+  height: 11px;
+  clip-path: polygon(10% 4%, 10% 86%, 34% 66%, 48% 98%, 60% 92%, 47% 62%, 80% 62%);
+  background: var(--tutor-hi);
 }
-.tutor-state.speaking .tutor-glyph {
-  animation: talk 0.6s ease-in-out infinite alternate;
+.tutor-state.waiting .tutor-glyph {
+  animation: wait 1.4s ease-in-out infinite;
 }
-.tutor-state.thinking .tutor-glyph {
-  animation: think 1s linear infinite;
+@keyframes wait {
+  50% { opacity: 0.4; }
 }
-@keyframes talk {
-  to {
-    transform: scale(1.25);
-  }
+.tutor-dots {
+  display: inline-flex;
+  gap: 3px;
 }
-@keyframes think {
-  to {
-    transform: rotate(360deg);
-  }
+.tutor-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--tutor-hi);
+  animation: dots 1s ease-in-out infinite;
+}
+.tutor-dots span:nth-child(2) { animation-delay: 0.15s; }
+.tutor-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dots {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
 }
 .tutor-name {
   font-weight: 650;
+  font-size: 12.5px;
   color: var(--tutor-hi);
 }
 .tutor-act {
   color: var(--text-3);
   font-size: 12px;
 }
+.tutor-state.asking .tutor-act {
+  color: #ffb26b;
+}
 .hud-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  min-width: 34px;
+  height: 26px;
+  min-width: 26px;
   justify-content: center;
-  padding: 0 8px;
+  padding: 0 6px;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -216,35 +237,58 @@ body {
 }
 .hud-btn.warn {
   color: #ffc85c;
-  background: rgba(255, 178, 36, 0.12);
+  background: rgba(255, 178, 36, 0.13);
 }
 .btn-text {
   font-size: 12px;
   font-weight: 600;
 }
+.hud-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  animation: more-in 160ms var(--ease-out);
+}
+@keyframes more-in {
+  from { opacity: 0; }
+}
+.demo-badge {
+  height: 15px;
+  padding: 0 4px;
+  margin-left: -2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+  cursor: help;
+}
 .driving-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
   border: 1px solid rgba(255, 178, 36, 0.55);
   background: rgba(255, 178, 36, 0.14);
   color: #ffd27a;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
   cursor: pointer;
 }
 .end {
-  height: 32px;
-  padding: 0 15px;
-  margin-left: 4px;
+  height: 24px;
+  padding: 0 11px;
+  margin-left: 3px;
   border-radius: 999px;
-  border: 1px solid rgba(240, 78, 94, 0.4);
-  background: rgba(240, 78, 94, 0.16);
+  border: 1px solid rgba(240, 78, 94, 0.35);
+  background: rgba(240, 78, 94, 0.14);
   color: #ff9aa2;
   font-weight: 650;
+  font-size: 12px;
   cursor: pointer;
 }
 .end:hover {
@@ -254,80 +298,36 @@ body {
 .hud-note {
   font-size: 11.5px;
   color: var(--student-hi);
-  background: rgba(18, 21, 28, 0.92);
+  background: rgba(18, 21, 28, 0.9);
   border: 1px solid rgba(255, 138, 31, 0.3);
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
 }
 .hud-note.warn {
   color: #ffd27a;
   border-color: rgba(255, 178, 36, 0.4);
 }
-.hud-cost {
-  position: absolute;
-  display: none;
-}
+
+/* ---------- captions: one subtle line of what Ada is saying (off by default) ---------- */
 .captions {
-  width: 560px;
-  max-width: 100%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: rgba(14, 17, 23, 0.93);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  max-width: 560px;
+  padding: 4px 11px;
+  border-radius: 9px;
+  background: rgba(14, 17, 23, 0.72);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: opacity 450ms ease;
+}
+.captions.gone {
+  opacity: 0;
 }
 .cap {
   display: flex;
-  gap: 8px;
-  font-size: 13.5px;
+  font-size: 12.5px;
   line-height: 1.45;
-  white-space: normal;
-}
-.cap .who {
-  flex: none;
-  width: 34px;
-  font-weight: 700;
-  font-size: 12px;
-  padding-top: 1px;
-}
-.cap.student .who {
-  color: var(--student-hi);
-}
-.cap.tutor .who {
-  color: var(--tutor-hi);
 }
 .cap .what {
-  color: var(--text);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  color: rgba(233, 237, 243, 0.92);
+  white-space: nowrap;
   overflow: hidden;
-}
-.cap:not(.final) .what {
-  color: var(--text-2);
-}
-.cites {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-left: 42px;
-  margin-top: 2px;
-}
-.cite {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--tutor-hi);
-  background: var(--tutor-tint);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-.scope {
-  margin-left: 42px;
-  font-size: 11.5px;
-  color: #ffd27a;
+  text-overflow: ellipsis;
 }

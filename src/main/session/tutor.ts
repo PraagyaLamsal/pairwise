@@ -101,6 +101,7 @@ export class TutorSession extends SessionController {
   private notes: string[] = [];
   private noteTimer: NodeJS.Timeout | null = null;
   private interimStudent = '';
+  private explainedMediaPause = false;
 
   constructor(readonly full: SessionDeps & { hub: HubWindow }) {
     super(full);
@@ -149,6 +150,7 @@ export class TutorSession extends SessionController {
     this.frames.clear();
     this.modelFrame = null;
     this.warnedBudget = false;
+    this.explainedMediaPause = false;
 
     // 1. engine: audio + capture
     await this.deps.engine.ensure();
@@ -641,7 +643,9 @@ export class TutorSession extends SessionController {
     const r = await this.deps.platform.media.pauseIfPlaying({ videoLikely, frontApp: front?.name });
     if (r.paused) {
       this.update({ mediaPausedByUs: true });
-      this.toast(`Paused ${r.app ?? 'your video'} — resume from the session bar`, 'info', 3200);
+      // The bar shows a resume button from now on; the reason is worth saying once.
+      if (!this.explainedMediaPause) this.toast(`Paused ${r.app ?? 'your video'} while you ask — ▶ in the session bar resumes it`, 'info', 3200);
+      this.explainedMediaPause = true;
       this.note(`[The app paused the student's ${r.app ?? 'video'} while they ask. Use the media tool to resume it when they want.]`);
     }
   }
@@ -693,8 +697,8 @@ export class TutorSession extends SessionController {
   }
 
   protected override onTalkModeChanged(): void {
+    // The session bar's mic shows the mode (a key badge in hold-to-talk): no toast.
     this.applyGate();
-    this.toast(this.settings.talkMode === 'hands-free' ? 'Hands-free: just talk' : 'Hold-to-talk: hold the ask keys while you speak', 'info');
   }
 
   protected override onVisionChanged(v: 'on' | 'paused'): void {

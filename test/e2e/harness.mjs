@@ -220,7 +220,14 @@ export async function screenShot(app, displayId, file) {
     const all = screen.getAllDisplays();
     const W = Math.max(...all.map((x) => x.bounds.x + x.bounds.width));
     const H = Math.max(...all.map((x) => x.bounds.y + x.bounds.height));
+    // The X root capture sometimes already holds a stale copy of the overlays (compositor): hide
+    // their content while grabbing the screen underneath, then lay the live overlay on top.
+    const overlays = s.overlays.displayIds().map((oid) => s.overlays.windowFor(oid)).filter((w) => w && !w.isDestroyed());
+    const vis = (v) => Promise.all(overlays.map((w) => w.webContents.executeJavaScript(`document.documentElement.style.visibility = '${v}'; new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`).catch(() => undefined)));
+    await vis('hidden');
+    await new Promise((r) => setTimeout(r, 120));
     const [src] = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(W * sf), height: Math.round(H * sf) } });
+    await vis('visible');
     if (!src) return null;
     const k = src.thumbnail.getSize().width / W;
     const base = src.thumbnail.crop({ x: Math.round(d.bounds.x * k), y: Math.round(d.bounds.y * k), width: Math.round(d.bounds.width * k), height: Math.round(d.bounds.height * k) });

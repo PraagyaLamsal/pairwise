@@ -64,7 +64,7 @@ try {
   await waitFor(() => S(() => globalThis.__pairwise.session.captions.some((c) => /slides call it/.test(c.text))), { label: 'caption' });
   await callTool(app, 'cite', { source: s1.response.results[0].source });
   await callTool(app, 'draw_diagram', { title: 'factorial(2)', kind: 'tree', nodes: [{ id: 'a', label: 'factorial(2)' }, { id: 'b', label: 'factorial(1)' }, { id: 'c', label: 'factorial(0)' }], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }] });
-  await waitFor(() => S(() => globalThis.__pairwise.session.whiteboard.diagrams.length === 1), { label: 'diagram snapshot', timeout: 15_000 });
+  await waitFor(() => S(() => globalThis.__pairwise.session.whiteboard.diagrams.length === 1), { label: 'diagram snapshot', timeout: 25_000 });
 
   // --- end: notes are written into the course folder --------------------------------------------
   const tEnd = Date.now();

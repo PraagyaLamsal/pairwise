@@ -67,7 +67,8 @@ export class NotesFeature {
       const text = str(args.text).slice(0, 400);
       if (!text) return { response: { ok: false } };
       this.saved.push({ kind, text, at: Date.now() });
-      this.s.toast(kind === 'to_review' ? `Added to review: ${text.slice(0, 60)}` : `Saved to notes: ${text.slice(0, 60)}`, 'success', 2200);
+      // Say it once per session; after that the notes just fill up quietly.
+      if (this.saved.length === 1) this.s.toast('Saving key points to your session notes', 'success', 2200);
       return { response: { ok: true } };
     });
   }

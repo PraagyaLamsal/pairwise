@@ -30,7 +30,8 @@ try {
   // Skip onboarding and add a course directly.
   const courseId = await main(app, () => {
     const p = globalThis.__pairwise;
-    p.settings.update({ onboardingComplete: true, sounds: true });
+    // Captions are off by default since round 2; this test looks at them.
+    p.settings.update({ onboardingComplete: true, sounds: true, captions: true });
     return p.courses.create({ code: 'COMP 1405', name: 'Introduction to Computer Science I', term: 'Fall 2026' }).id;
   });
   const started = await main(app, (_e, id) => globalThis.__pairwise.session.start({ courseId: id }), courseId);

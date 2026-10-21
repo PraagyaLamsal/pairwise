@@ -62,7 +62,11 @@ ipc.on('overlay:init', (i) => {
   });
 });
 
-ipc.on('overlay:cursor', (f) => cursor.pushFrame(f));
+ipc.on('overlay:cursor', (f) => {
+  cursor.pushFrame(f);
+  // The student's pointer: cards and chips it comes near fade out of its way.
+  if (f.mouse) ui.setPointer(f.mouse);
+});
 ipc.on('overlay:flight', (f) => cursor.startFlight(f));
 ipc.on('overlay:trace', (t) => cursor.startTrace(t));
 ipc.on('overlay:penItems', (m) => {

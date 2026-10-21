@@ -602,6 +602,8 @@ function timingFor(item: InkItem): PenTiming {
 /** How long drawing an item should take (ms): its strokes at the pen's pace, plus pen lifts. */
 export function drawDurationFor(item: InkItem): number {
   const t = timingFor(item);
+  // Diagram labels on the whiteboard are typed briskly (a diagram has many of them).
+  if (item.kind === 'text' && item.surface === 'whiteboard') return Math.round(Math.min(900, Math.max(240, t.natural * 0.6)));
   if (item.kind === 'text') return Math.round(Math.min(item.font === 'hand' ? 2100 : 3800, Math.max(260, t.natural)));
   if (item.kind === 'step' || item.kind === 'ring') return Math.round(t.natural);
   return Math.round(Math.min(1900, Math.max(420, t.natural)));

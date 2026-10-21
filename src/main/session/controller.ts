@@ -190,9 +190,14 @@ export class SessionController extends EventEmitter {
         this.update({ captions });
         break;
       }
-      case 'toggleHud':
-        this.update({ hudVisible: this.deps.hud.toggle() });
+      case 'toggleHud': {
+        const hudVisible = this.deps.hud.toggle();
+        this.update({ hudVisible });
+        // The bar carries the "can see" eye; without it, the overlay shows a small one.
+        this.ui.hudHidden = !hudVisible;
+        this.pushUi();
         break;
+      }
       case 'clearInk':
         this.ink.fade({});
         break;
@@ -205,9 +210,9 @@ export class SessionController extends EventEmitter {
   protected onTalkModeChanged(): void {}
 
   setMuted(muted: boolean): void {
+    // The session bar shows it (a red mic), so no toast.
     this.update({ muted });
     this.deps.engine.command({ type: 'setMuted', muted });
-    this.toast(muted ? 'Microphone muted' : 'Microphone on', 'info');
   }
 
   setVision(vision: 'on' | 'paused'): void {
