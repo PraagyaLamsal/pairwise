@@ -121,6 +121,13 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
         ],
       },
       {
+        heard: '(demo) quiz me',
+        segments: [
+          { say: 'Quick check. Click on the middle of your screen, as if it were the answer.' },
+          { tool: 'ask_to_point', args: { question: 'Click the middle of your screen', answer: 'the middle of your screen' } },
+        ],
+      },
+      {
         heard: '(demo) did I get it right?',
         segments: [
           { say: 'Yes, that\'s exactly it!' },
@@ -175,6 +182,16 @@ export class MockLiveServer {
       const sayScript = (r: Record<string, unknown>): MockTurn | null => (Array.isArray(r.script) && r.script.length ? { segments: r.script.map((say) => ({ say: String(say) })) } : null);
       this.afterTool.set('explain_on_screen', sayScript);
       this.afterTool.set('trace_code', sayScript);
+      // "Show me": react to where the student clicked.
+      this.afterTool.set('ask_to_point', (r) => ({
+        segments: !r.clicked
+          ? [{ say: 'No problem, we can come back to that one.' }]
+          : r.on_target === true
+            ? [{ say: 'Yes, exactly there!' }, { tool: 'celebrate', args: { message: 'nice!' } }]
+            : r.on_target === false
+              ? [{ say: 'Not quite. Look a little closer to the middle, and try again.' }]
+              : [{ say: 'Got it, I can see your click. In demo mode I can\'t check what is there, but with a key I\'d tell you if that was right.' }],
+      }));
     }
   }
 

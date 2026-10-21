@@ -93,6 +93,20 @@ export const TOOL_DECLARATIONS = [
     ),
   },
   {
+    name: 'ask_to_point',
+    description:
+      'Check their understanding by asking them to show you something on their own screen: "click the line where the recursion stops", "point at the button that runs the tests". The app shows the question in one line and takes their next click (it does not reach the app underneath), marks it with a ring and returns where they clicked — and, if you say what the right answer is, whether they got it — plus a fresh frame. Say the question out loud too, don\'t point at the answer first, then wait for the result before reacting. One question at a time; they can press Esc to skip.',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        question: S('The question as shown on screen, short, e.g. "Click the line where the recursion stops".'),
+        answer: S('Optional: what on screen is the right answer, precisely, e.g. "line 2: if n == 0:" — the app checks their click against it.'),
+        display: I('1-based display number, only if the answer is on a display other than the one you are watching.'),
+      },
+      ['question'],
+    ),
+  },
+  {
     name: 'clear_drawings',
     description: 'Erase drawings on screen (yours, the student\'s, or all) — do this when you move on to a new point.',
     behavior: 'NON_BLOCKING',

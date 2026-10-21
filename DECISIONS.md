@@ -362,3 +362,19 @@ the pop and ripple; a celebration is just the word, no confetti; cursor labels a
 cards, toasts and consent prompts fade in instead of sliding or springing; the driving frame
 stops breathing; the pill's thinking dots brighten in turn without bouncing. Typing (notes,
 value chips) and fades are kept: they reveal content rather than move it.
+
+### D-040 · "Show me" questions (`ask_to_point`)
+Explaining isn't teaching until the student can do it, so Ada can check understanding the way a
+tutor sitting next to you would: "show me where the recursion stops". The tool shows her question
+in one line at the bottom of every display (her colour's dot, "Esc to skip"), gives the screen a
+thin orange edge and a target cursor, and takes the student's next click on the overlay itself:
+it never reaches the app underneath, so "click the Submit button" can't submit anything. The
+click is marked with the student's own highlight ring (the Tuple click ring, in their colour) and
+drawn into a fresh frame for Ada. If she said what the right answer is, it's grounded first (the
+same way she finds what she points at) and the result says whether the click was on it — with a
+little slack for small targets — or how many pixels off, so she doesn't have to judge it from a
+low-detail frame. Esc (a global shortcut only while asking) or a right-click skips; it gives up
+after 90 s. Her cursor steps back while she waits so it doesn't give the answer away. The demo
+tutor has a "quiz me" turn. Considered: reading the click with global mouse hooks (needs
+Accessibility, and the click would also press whatever is under it), and multiple-choice cards
+(an extra panel to read; pointing at the real thing is the point).

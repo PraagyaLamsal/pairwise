@@ -10,6 +10,7 @@ import { CursorView } from './cursor';
 import { OverlayUi } from './ui';
 import { DrawInput } from './draw';
 import { Celebrations } from './celebrate';
+import { AnswerInput } from './answer';
 
 const canvas = document.createElement('canvas');
 canvas.className = 'ink-canvas';
@@ -48,6 +49,7 @@ function markDirty(): void {
   wake();
 }
 const draw = new DrawInput(drawSurface, markDirty);
+const answer = new AnswerInput(drawSurface);
 let fontsReady = false;
 
 function resize(): void {
@@ -81,6 +83,7 @@ ipc.on('overlay:init', (i) => {
   cursor.setColor(i.tutorColor);
   ui.configure(i.display.id, i.display.bounds, i.tutorName);
   draw.configure(i.display.id, i.display.bounds);
+  answer.configure(i.display.id, i.display.bounds);
   celebrations.setColors([i.tutorColor, i.studentColor, '#FFFFFF', '#34D399', '#9B5DE5']);
   document.documentElement.style.setProperty('--tutor', i.tutorColor);
   document.documentElement.style.setProperty('--student', i.studentColor);
@@ -126,6 +129,7 @@ ipc.on('overlay:drawMode', (m) => {
   draw.setMode(m, hint);
   markDirty();
 });
+ipc.on('overlay:answerMode', (m) => answer.setMode(m));
 ipc.on('overlay:ink', (op: InkOp) => applyInk(op));
 
 function applyInk(op: InkOp): void {

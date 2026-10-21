@@ -121,6 +121,8 @@ export interface EventMap {
   'overlay:ink': InkOp;
   'overlay:ui': OverlayUiState;
   'overlay:drawMode': DrawModeState;
+  /** "Show me" (ask_to_point): the overlays take the student's next click as their answer. */
+  'overlay:answerMode': { active: boolean; prompt: string; color: string };
   'overlay:celebrate': Celebration;
   'overlay:calibration': CalibrationState | null;
   'whiteboard:ink': InkOp;
@@ -140,6 +142,9 @@ export interface SendMap {
   'overlay:stroke': StudentStroke;
   'overlay:drawCommit': { via: 'toggle' | 'hold' };
   'overlay:drawCancel': Record<string, never>;
+  /** The student's answer to ask_to_point: where they clicked (global DIP). */
+  'overlay:answer': { displayId: string; point: { x: number; y: number } };
+  'overlay:answerCancel': Record<string, never>;
   'overlay:consent': { id: string; decision: 'allow' | 'deny' };
   'overlay:dismissCard': { kind: 'citation' | 'step' | 'toast' | 'scope' };
   'overlay:hover': { displayId: string; interactive: boolean };
@@ -268,12 +273,12 @@ export const INVOKE_CHANNELS: InvokeChannel[] = [
 export const EVENT_CHANNELS: EventChannel[] = [
   'session:snapshot', 'session:caption', 'session:levels', 'settings:changed', 'courses:changed', 'courses:indexProgress',
   'usage:changed', 'hub:navigate', 'overlay:init', 'overlay:cursor', 'overlay:flight', 'overlay:trace', 'overlay:cursorCancel', 'overlay:ink', 'overlay:ui',
-  'overlay:drawMode', 'overlay:celebrate', 'overlay:calibration', 'whiteboard:ink', 'whiteboard:init', 'overlay:penItems', 'whiteboard:drawMode',
+  'overlay:drawMode', 'overlay:answerMode', 'overlay:celebrate', 'overlay:calibration', 'whiteboard:ink', 'whiteboard:init', 'overlay:penItems', 'whiteboard:drawMode',
   'whiteboard:requestSnapshot', 'engine:command',
 ];
 
 export const SEND_CHANNELS: SendChannel[] = [
-  'overlay:ready', 'overlay:stroke', 'overlay:drawCommit', 'overlay:drawCancel', 'overlay:consent', 'overlay:dismissCard', 'overlay:hover',
+  'overlay:ready', 'overlay:stroke', 'overlay:drawCommit', 'overlay:drawCancel', 'overlay:answer', 'overlay:answerCancel', 'overlay:consent', 'overlay:dismissCard', 'overlay:hover',
   'overlay:uiRects', 'whiteboard:stroke', 'whiteboard:snapshot', 'whiteboard:closed', 'whiteboard:clear', 'engine:ready', 'engine:audio', 'engine:micLevel',
   'engine:vad', 'engine:playback', 'engine:frame', 'engine:reply', 'engine:log', 'hub:log',
 ];

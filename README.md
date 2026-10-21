@@ -44,6 +44,7 @@ a Mac the system fonts and window chrome differ; the overlay, cursor and ink are
 | ![A typed note while typing, then done](docs/screenshots/typed-note.png) | **Typed notes, like Tuple's text tool.** Letter by letter in the system font, with a caret and a dotted outline while she types. (Handwriting is a setting.) |
 | ![Ada's cursor following a line](docs/screenshots/follow-line.png) ![Ada's cursor sweeping down a function](docs/screenshots/sweep.png) | **Her cursor as a pointer.** Most of the time she just points: she follows a line under the text as she reads it, runs down a block line by line, or rests on the thing she means — nothing drawn, no label. |
 | ![Ada traces factorial(2): value chips after each line](docs/screenshots/trace.png) | **She traces your code like a debugger.** "What does this return?" — her cursor skims each line as it runs while she says what happens, and the values appear just after the line's end in small chips. When a line runs again (here the recursive call, `n = 2` → `n = 1`), its value updates in place. |
+| ![Ada asks: click the line where the recursion stops](docs/screenshots/show-me-ask.png) ![The student's click, marked with their ring](docs/screenshots/show-me-answer.png) | **"Show me" questions.** To check you really get it, Ada asks you to point at the answer on your own screen ("click the line where the recursion stops"). Your next click is taken as the answer (it doesn't reach the app underneath), marked with your own ring, and she's told whether it was on the right line or how far off, then reacts. Esc skips. |
 | ![Student circles a line while asking](docs/screenshots/draw-and-ask.png) | **Ask by drawing.** Hold ⌃⌥, talk, and circle something (a click is a dot). Your orange marks, a zoomed crop and your words go to her as one question. |
 | ![One-line step card](docs/screenshots/step-line.png) | **Step by step.** She points at the next thing to click and waits until you do it; the checklist is one line until a step changes or you rest your pointer on it. |
 | ![Pointing-accuracy test results](docs/screenshots/pointing-test.png) | **Pointing accuracy check** (Setup & checks). Labelled buttons on every display, each found on a real capture and scored in pixels. |
@@ -119,8 +120,8 @@ npm test             # unit + integration (vitest): geometry, Live protocol, gro
 npm run test:e2e     # the real app end to end (Playwright for Electron) against a local Gemini
                      # Live mock: shell, voice, pointing accuracy (1× and 2×), draw-and-ask,
                      # steps, calibration, course brain, takeover, App Veil, whiteboard, notes,
-                     # the quiet screen, cursor gestures and code traces (1× and 2×), and
-                     # Reduce motion
+                     # the quiet screen, cursor gestures and code traces (1× and 2×),
+                     # Reduce motion, and "Show me" questions
 npm run eval:grounding   # with GEMINI_API_KEY set: the pointing-accuracy test using real Gemini
 ```
 
@@ -201,8 +202,12 @@ then link `/tmp/comp1405`). Open some code or a slide on screen.
    `3 * factorial(2)` — updating in place when the function is called again. *(In demo mode it's
    the third thing you say; without a key she can't read your code, so the chips land in the
    middle of the screen.)*
-4. Ask "clear that" (or ⌃⌥C).
-5. **Setup & checks → Pointing accuracy → Start test** (during a session): labelled buttons appear
+4. Say "quiz me on this". Now and then she checks your understanding by asking you to **show
+   her**: a one-line question appears at the bottom ("Click the line where the recursion stops")
+   and the screen gets a thin orange edge. Click the answer: your click is marked with your own
+   ring, it doesn't reach the app underneath, and she tells you whether you got it. Esc skips.
+5. Ask "clear that" (or ⌃⌥C).
+6. **Setup & checks → Pointing accuracy → Start test** (during a session): labelled buttons appear
    on every display, she finds each on a real screenshot and you see how many pixels off she was.
    **Settings → Cursor & ink → Preview on screen** shows every mark kind without using the API.
 

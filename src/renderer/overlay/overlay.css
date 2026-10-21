@@ -634,6 +634,64 @@ body.drawing::after {
   }
 }
 
+/* ---------- "Show me": Ada waits for the student to click the answer ---------- */
+body.answering .draw-surface {
+  pointer-events: auto;
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='3.2'/><circle cx='16' cy='16' r='9' fill='none' stroke='%23FF8A1F' stroke-width='1.8'/><circle cx='16' cy='16' r='2.2' fill='%23FF8A1F' stroke='white' stroke-width='1'/></svg>") 16 16, crosshair;
+}
+body.answering::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 138, 31, 0.45);
+  animation: draw-in 160ms ease-out;
+}
+.answer-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(720px, calc(100vw - 48px));
+  padding: 8px 8px 8px 12px;
+  border-radius: 999px;
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f2f4f8;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transition: opacity 140ms;
+  pointer-events: none;
+}
+.answer-hint.hidden {
+  opacity: 0;
+}
+.ah-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tutor, #2f7bff);
+}
+.ah-q {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ah-esc {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(242, 244, 248, 0.6);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
 /* ---------- macOS "Reduce motion" ----------
  * Set from the system setting (and by main for tests): cards and toasts fade in instead of
  * sliding or popping, the driving frame stops breathing, labels don't scale. Fades stay. */
