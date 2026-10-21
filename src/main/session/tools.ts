@@ -43,15 +43,30 @@ export const TOOL_DECLARATIONS = [
     parameters: OBJ({ target: S('Specific description of what to point at.'), label: S('2–4 word label shown beside your cursor, e.g. "Run button".'), ...APPROX }, ['target']),
   },
   {
+    name: 'move_cursor',
+    description:
+      'Use your cursor as a pointer, the way a person does on a call — nothing is drawn and no label shows. style "hover": rest it on the thing you are talking about. "follow_line": glide under a line of code or text at reading pace while you read or explain it. "sweep": run down a list or block of lines, one line at a time. Use these often; they are lighter than drawing.',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        target: S('What to point at, follow or sweep, precisely: e.g. "line 4: return n * factorial(n - 1)" or "the four lines of the for loop".'),
+        style: E(['hover', 'follow_line', 'sweep'], 'How to move.'),
+        lines: I('For sweep: how many lines the block has (optional).'),
+        ...APPROX,
+      },
+      ['target', 'style'],
+    ),
+  },
+  {
     name: 'annotate',
-    description: 'Draw one to three hand-drawn marks on the student\'s screen while you talk: circle, underline, highlight, box, arrow, a short note, a step number, a check or a cross.',
+    description: 'Draw one to three marks on the student\'s screen while you talk: circle, underline, highlight, box, arrow, a short typed note, a step number, a check or a cross. Use ink sparingly — when a mark really helps; otherwise point or move_cursor.',
     behavior: 'NON_BLOCKING',
     parameters: OBJ({ items: ARR(ANNOTATION_ITEM, 'Marks to draw, in order.'), clear_previous: B('Erase your earlier marks first.') }, ['items']),
   },
   {
     name: 'explain_on_screen',
     description:
-      'For a visual explanation of what is on screen (walking through code, a slide, a diagram, an error): a vision model studies a full-resolution screenshot and returns a short script — lines to say, each with marks that appear exactly as you say it. When it arrives, say the lines in order, essentially word for word, then continue naturally. Say a few words while it prepares ("let me mark this up").',
+      'For a visual explanation of what is on screen (walking through code, a slide, a diagram, an error): a vision model studies a full-resolution screenshot and returns a short script — lines to say, each with cursor moves (following a line, sweeping a block) or marks that happen exactly as you say it. When it arrives, say the lines in order, essentially word for word, then continue naturally. Say a few words while it prepares ("let me walk you through it").',
     behavior: 'NON_BLOCKING',
     parameters: OBJ(
       {

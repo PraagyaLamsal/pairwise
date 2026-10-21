@@ -152,22 +152,25 @@ export function mergeSettings(stored: unknown, base: Settings = defaultSettings(
   };
   const merged = merge(base, stored) as Settings;
   const from = isObject(stored) && typeof stored['version'] === 'number' ? stored['version'] : SETTINGS_VERSION;
+  let positions: Settings['hudPositions'];
   if (isObject(stored) && from < 2) {
     // Round 2 declutter: captions start hidden (one tap or ⌃⌥T brings them back).
     merged.captions = false;
     const old = stored['hudPosition'];
     if (isObject(old) && typeof old['displayId'] === 'string' && typeof old['x'] === 'number' && typeof old['y'] === 'number') {
-      merged.hudPositions = { [old['displayId']]: { x: old['x'], y: old['y'] } };
+      positions = { [old['displayId']]: { x: old['x'], y: old['y'] } };
     }
   }
+  if (isObject(stored) && isObject(stored['hudPositions'])) {
+    const ok = Object.entries(stored['hudPositions']).filter(([, v]) => isObject(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']));
+    positions = { ...(positions ?? {}), ...Object.fromEntries(ok.map(([k, v]) => [k, { x: Number((v as { x: number }).x), y: Number((v as { y: number }).y) }])) };
+  }
+  if (positions) merged.hudPositions = positions;
+  else delete merged.hudPositions;
   merged.version = SETTINGS_VERSION;
   merged.playbackRate = Math.min(1.4, Math.max(0.75, Number(merged.playbackRate) || 1));
   merged.inkFadeDelaySec = Math.min(60, Math.max(1, merged.inkFadeDelaySec));
   merged.budget.monthlyLimitUsd = Math.max(0, merged.budget.monthlyLimitUsd);
-  if (isObject(stored) && isObject(stored['hudPositions'])) {
-    const ok = Object.entries(stored['hudPositions']).filter(([, v]) => isObject(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']));
-    merged.hudPositions = { ...(merged.hudPositions ?? {}), ...Object.fromEntries(ok.map(([k, v]) => [k, { x: Number((v as { x: number }).x), y: Number((v as { y: number }).y) }])) };
-  }
   if (isObject(stored) && typeof stored['lastCourseId'] === 'string') merged.lastCourseId = stored['lastCourseId'];
   return merged;
 }

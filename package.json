@@ -22,6 +22,7 @@
     "dev:linux": "PAIRWISE_FAKE_PLATFORM=1 PAIRWISE_MOCK_LIVE=1 electron-vite dev",
     "mock-live": "node --experimental-strip-types test/mock-live/server.ts",
     "dist:mac": "npm run build && electron-builder --mac --config electron-builder.yml",
+    "app": "node scripts/build-app.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "eval:grounding": "npm run build && PAIRWISE_EVAL_GROUNDER=gemini node scripts/run-e2e.mjs 05-calibration",
     "predev": "node scripts/ensure-electron.mjs",

@@ -29,7 +29,7 @@ const tests = readdirSync(join(root, 'test', 'e2e'))
   .sort();
 
 /** Tests that run a second time with Chromium forced to 2× (real HiDPI). */
-const HIDPI = ['03-pointing', '05-calibration'];
+const HIDPI = ['03-pointing', '05-calibration', '12-gestures'];
 
 let failed = 0;
 let runs = 0;

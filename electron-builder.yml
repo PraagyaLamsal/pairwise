@@ -1,3 +1,5 @@
+# npm run app      → builds Pairwise.app for this Mac, signs it ad hoc, installs it in
+#                    /Applications (or ~/Applications) and opens it (scripts/build-app.mjs)
 # npm run dist:mac → dist/Pairwise-<version>-<arch>.dmg (unsigned; see BLOCKERS.md B-4 to sign)
 appId: app.pairwise.tutor
 # Every native module ships prebuilt N-API binaries (uiohook-napi, @jitsi/robotjs, get-windows):
@@ -37,8 +39,8 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+  # A normal Dock app (round 2): no LSUIElement. The menu-bar icon stays as well.
   extendInfo:
-    LSUIElement: true
     NSMicrophoneUsageDescription: Pairwise listens to you during a tutoring session so you can talk to the tutor.
     NSAppleEventsUsageDescription: Pairwise pauses and resumes the lecture video or music you were playing while you ask a question.
 dmg:

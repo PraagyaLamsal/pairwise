@@ -16,7 +16,8 @@ import { EngineHost } from './windows/engine';
 import { HudWindow } from './windows/hud';
 import { HubWindow } from './windows/hub';
 import { registry } from './windows/registry';
-import { AppTray } from './tray';
+import { AppTray, type TrayActions } from './tray';
+import { AppMenus } from './app-menu';
 import { createSession } from './session';
 
 const log = logger('app');
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
   initLogFile(join(dataDir, 'logs'));
   log.info(`${APP_NAME} ${app.getVersion()} starting (${process.platform}, electron ${process.versions.electron})${env.fakePlatform ? ' [fake platform]' : ''}`);
   if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
-  if (env.isMac && !env.e2e) app.dock?.hide();
+  // A normal Dock app (round 2): the Dock icon opens the hub, its menu starts a session.
 
   const settings = new SettingsService(dataDir);
   const courses = new CourseStore(dataDir);
@@ -80,19 +81,26 @@ async function main(): Promise<void> {
 
   const session = createSession({ settings, courses, platform, engine, hud, hotkeys, usage, hub });
 
+  // Menu-bar icon, Dock menu and app menu share the same actions.
+  const actions: TrayActions = {
+    startSession: (courseId, resume) => void session.start({ courseId, resume }).then((r) => !r.ok && r.error && hub.open('courses')),
+    endSession: () => void session.end(),
+    toggleMute: () => void session.command({ type: 'toggleMute' }),
+    toggleVision: () => void session.command({ type: 'toggleVision' }),
+    toggleWhiteboard: () => void session.command({ type: 'toggleWhiteboard' }),
+    openHub: (tab) => hub.open(tab),
+    quit: () => app.quit(),
+  };
   const tray = new AppTray(
-    {
-      startSession: (courseId, resume) => void session.start({ courseId, resume }).then((r) => !r.ok && r.error && hub.open('courses')),
-      endSession: () => void session.end(),
-      toggleMute: () => void session.command({ type: 'toggleMute' }),
-      toggleVision: () => void session.command({ type: 'toggleVision' }),
-      toggleWhiteboard: () => void session.command({ type: 'toggleWhiteboard' }),
-      openHub: (tab) => hub.open(tab),
-      quit: () => app.quit(),
-    },
+    actions,
     () => ({ courses: courses.list(), snapshot: session.snapshot, usage: usage.summary(), settings: settings.get() }),
   );
   tray.create();
+  const menus = new AppMenus(
+    actions,
+    () => ({ courses: courses.list(), snapshot: session.snapshot, settings: settings.get() }),
+  );
+  menus.refresh();
 
   // Fan-out of state changes ------------------------------------------------------
   let trayKey = '';
@@ -109,6 +117,7 @@ async function main(): Promise<void> {
     if (key !== trayKey) {
       trayKey = key;
       tray.refresh();
+      menus.refresh();
     }
   });
   session.on('needCourse', () => hub.open('courses'));
@@ -117,11 +126,13 @@ async function main(): Promise<void> {
   courses.on('changed', (list) => {
     registry.broadcast('courses:changed', list);
     tray.refresh();
+    menus.refresh();
   });
   settings.on('changed', (s) => {
     registry.broadcast('settings:changed', s);
     hotkeys.setBindings(s.shortcuts);
     tray.refresh();
+    menus.refresh();
   });
   usage.on('changed', (u) => {
     registry.send(['hub', 'hud'], 'usage:changed', u);
@@ -137,6 +148,7 @@ async function main(): Promise<void> {
     version: app.getVersion(),
     platform: process.platform,
     demo: session.demoMode(),
+    keyUnreadable: settings.keyUnreadable,
     fakePlatform: env.fakePlatform,
     tutorName: settings.get().tutorName,
   }));
@@ -251,13 +263,14 @@ async function main(): Promise<void> {
     platform.hooks.stop();
   });
   app.on('window-all-closed', () => {
-    /* menu-bar app: keep running */
+    /* keep running: the menu-bar icon, the Dock icon and the hotkeys stay available */
   });
   app.on('second-instance', () => hub.open());
   app.on('activate', () => hub.open());
 
-  // First launch → onboarding; afterwards the course picker.
-  if (!env.e2e || process.env.PAIRWISE_OPEN_HUB === '1') hub.open(settings.get().onboardingComplete ? 'courses' : 'onboarding');
+  // First launch → onboarding; afterwards the course picker (or Settings → Gemini if the saved
+  // key was written by another build and has to be pasted again).
+  if (!env.e2e || process.env.PAIRWISE_OPEN_HUB === '1') hub.open(!settings.get().onboardingComplete ? 'onboarding' : settings.keyUnreadable ? 'settings' : 'courses');
 
   if (env.e2e) {
     (globalThis as Record<string, unknown>).__pairwise = { session, courses, settings, platform, hotkeys, usage, hub, hud, engine, registry };

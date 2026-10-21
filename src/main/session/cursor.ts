@@ -122,10 +122,12 @@ export class CursorEngine extends EventEmitter {
     if (!this.segments.length) return { ...this.pos };
     let p = this.pos;
     for (const s of this.segments) {
-      if (t < s.startAt) return this.segStart(s, p);
-      p = this.segPoint(s, Math.min(t, s.endAt));
+      // Before a segment starts the cursor waits where the previous one left it.
+      if (t < s.startAt) return { ...p };
+      if (t <= s.endAt) return this.segPoint(s, t);
+      p = this.segPoint(s, s.endAt);
     }
-    return p;
+    return { ...p };
   }
 
   /** Appear beside the student's pointer, say hello with the name label, then stay there. */
@@ -215,7 +217,10 @@ export class CursorEngine extends EventEmitter {
         t = seg.endAt;
         from = end;
       } else if (step.kind === 'glide') {
-        if (step.path.length < 2) continue;
+        if (step.path.length < 2) {
+          times.push({ startAt: t, endAt: t }); // keep times aligned with steps
+          continue;
+        }
         const end = step.path[step.path.length - 1];
         const trace: CursorTrace = { path: step.path.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })), style: step.style, startAt: t, duration: Math.max(1, Math.round(step.ms)), end };
         const seg: Segment = { kind: 'trace', startAt: t, endAt: t + trace.duration, trace };
@@ -300,13 +305,6 @@ export class CursorEngine extends EventEmitter {
     if (p.x > b.x + b.width - 90) p.x = mouse.x - ARRIVE_OFFSET.x - 20;
     if (p.y > b.y + b.height - 50) p.y = mouse.y - ARRIVE_OFFSET.y - 20;
     return clampPointInside(p, { x: b.x + 4, y: b.y + 4, width: b.width - 8, height: b.height - 8 });
-  }
-
-  private segStart(s: Segment, fallback: Point): Point {
-    if (s.kind === 'flight') return s.flight.from;
-    if (s.kind === 'hold') return s.at;
-    if (s.trace.path) return s.trace.path[0];
-    return (s.item && inkPenPoint(s.item, 0)) ?? fallback;
   }
 
   private segPoint(s: Segment, t: number): Point {

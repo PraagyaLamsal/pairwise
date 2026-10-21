@@ -71,6 +71,18 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
     },
     turns: [
       {
+        heard: '(demo) can you walk me through this?',
+        segments: [
+          { say: 'Sure. Most of the time I just use my cursor, like someone sitting next to you.' },
+          { tool: 'move_cursor', args: { target: 'the block of lines in the middle', style: 'sweep', lines: 4, box: [360, 260, 600, 700] } },
+          { say: 'I run down a block of lines to show you its shape,' },
+          { tool: 'move_cursor', args: { target: 'one line in the middle', style: 'follow_line', box: [440, 260, 480, 700] } },
+          { say: 'follow one line while I read it with you,' },
+          { tool: 'move_cursor', args: { target: 'a spot on the right', style: 'hover', box: [520, 720, 560, 800] } },
+          { say: 'or just rest on the thing I mean. And when I stop, my cursor stays put and fades back, out of your way.' },
+        ],
+      },
+      {
         heard: '(demo) what can you draw?',
         segments: [
           { say: 'I mark things up while I explain them.' },

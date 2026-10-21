@@ -107,9 +107,12 @@ export class CursorView {
 
   private positionAtTime(t: number): Point {
     let p = this.parkedAt ?? this.pos;
+    const at = (s: Seg, u: number) => (s.kind === 'flight' ? flightPoint(s.f, u).p : (this.tracePoint(s.t, u) ?? s.t.end));
     for (const s of this.segs) {
-      if (t < s.startAt) return s.kind === 'flight' ? s.f.from : (this.tracePoint(s.t, s.startAt) ?? p);
-      p = s.kind === 'flight' ? flightPoint(s.f, Math.min(t, s.endAt)).p : (this.tracePoint(s.t, Math.min(t, s.endAt)) ?? s.t.end);
+      // Before a segment starts the cursor waits where the previous one left it.
+      if (t < s.startAt) return p;
+      if (t <= s.endAt) return at(s, t);
+      p = at(s, s.endAt);
     }
     return p;
   }

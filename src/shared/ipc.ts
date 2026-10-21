@@ -28,6 +28,8 @@ export interface AppInfo {
   version: string;
   platform: string;
   demo: boolean;
+  /** A key is saved but this build can't decrypt it (see ApiKeyStatus.unreadable). */
+  keyUnreadable?: boolean;
   fakePlatform: boolean;
   tutorName: string;
 }
@@ -44,6 +46,11 @@ export interface ApiKeyStatus {
   hasKey: boolean;
   source: 'keychain' | 'env' | 'none';
   preview?: string;
+  /**
+   * A key is saved but this copy of Pairwise can't decrypt it: it was saved by another build
+   * (`npm run dev` uses Electron's keychain entry, the app its own). Paste it again.
+   */
+  unreadable?: boolean;
 }
 
 export interface RunningApp {

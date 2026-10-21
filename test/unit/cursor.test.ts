@@ -125,6 +125,23 @@ describe('CursorEngine (stays where she leaves it)', () => {
     c.stop();
   });
 
+  it('reports where it is during a move, not where the next move starts (regression)', () => {
+    const { c } = engine();
+    c.start();
+    const from = c.position;
+    const [fly, hold, glide] = c.schedule([
+      { kind: 'fly', to: { x: 900, y: 500 } },
+      { kind: 'hold', ms: 300 },
+      { kind: 'glide', path: [{ x: 900, y: 500 }, { x: 900, y: 700 }], ms: 1000, style: 'sweep' },
+    ]);
+    const mid = c.positionAt((fly.startAt + fly.endAt) / 2);
+    expect(mid.x).toBeGreaterThan(from.x + 50);
+    expect(mid.x).toBeLessThan(900 - 50);
+    expect(c.positionAt((hold.startAt + hold.endAt) / 2)).toEqual({ x: 900, y: 500 });
+    expect(c.positionAt(glide.startAt + 100).y).toBeCloseTo(500, 5); // resting on the first line
+    c.stop();
+  });
+
   it('positionAt follows the scheduled timeline', () => {
     const { c } = engine();
     c.start();

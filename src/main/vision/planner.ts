@@ -4,9 +4,9 @@ import { logger } from '../log';
 
 const log = logger('planner');
 
-/** One mark in a planned beat, in the screenshot's own 0–1000 coordinates. */
+/** One mark (or pointer gesture) in a planned beat, in the screenshot's own 0–1000 coordinates. */
 export interface PlannedMark {
-  kind: 'circle' | 'underline' | 'highlight' | 'box' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'bracket';
+  kind: 'circle' | 'underline' | 'highlight' | 'box' | 'arrow' | 'text' | 'step' | 'check' | 'cross' | 'bracket' | 'hover' | 'follow_line' | 'sweep';
   /** [ymin, xmin, ymax, xmax] of what the mark is about. */
   box_2d?: number[];
   /** [y, x] for arrow tails or free-standing notes/badges. */
@@ -29,7 +29,7 @@ export interface Plan {
 const MARK = {
   type: 'OBJECT',
   properties: {
-    kind: { type: 'STRING', enum: ['circle', 'underline', 'highlight', 'box', 'arrow', 'text', 'step', 'check', 'cross', 'bracket'] },
+    kind: { type: 'STRING', enum: ['hover', 'follow_line', 'sweep', 'circle', 'underline', 'highlight', 'box', 'arrow', 'text', 'step', 'check', 'cross', 'bracket'] },
     box_2d: { type: 'ARRAY', items: { type: 'INTEGER' }, description: '[ymin, xmin, ymax, xmax] 0-1000 of the thing this mark is about' },
     point: { type: 'ARRAY', items: { type: 'INTEGER' }, description: '[y, x] 0-1000: arrow tail, or where a free-standing note starts' },
     text: { type: 'STRING', description: 'For text marks: at most 5 words. For arrows: optional note at the tail.' },
@@ -94,8 +94,9 @@ export class ExplanationPlanner {
       req.terms.length ? `Use the course's own terms where they fit: ${req.terms.slice(0, 20).join('; ')}.` : '',
       `The student asks: "${req.question}"${req.focus ? ` (focus: ${req.focus})` : ''}.`,
       req.studentMarks ? `They marked: ${req.studentMarks}.` : '',
-      `Write ${lines} beats. Each beat is what you SAY (one or two short, natural spoken sentences — no markdown, no lists, never read code symbols aloud letter by letter) plus the 0–2 marks you draw at that moment.`,
-      'Marks must point at things actually visible in this screenshot. Give each mark a tight box_2d [ymin, xmin, ymax, xmax] (0–1000) around exactly the word, line, button or region it is about. Circles and boxes enclose it; underline/highlight a line of text; arrows point at it (optional point [y, x] for the tail); text is a short handwritten note (≤5 words) placed beside it; step is a numbered badge.',
+      `Write ${lines} beats. Each beat is what you SAY (one or two short, natural spoken sentences — no markdown, no lists, never read code symbols aloud letter by letter) plus the 0–2 things your cursor does at that moment.`,
+      'Like a person pairing with them, use your cursor mostly as a pointer: "hover" rests it on the thing you mention, "follow_line" glides under one line of code or text while you read or explain it, "sweep" runs down a block of lines. Draw ink sparingly — at most one mark in the whole explanation unless marking really helps: circles and boxes enclose something; underline/highlight a line of text; arrows point at it (optional point [y, x] for the tail); text is a short typed note (≤5 words) placed beside it; step is a numbered badge.',
+      'Everything must be about things actually visible in this screenshot. Give each one a tight box_2d [ymin, xmin, ymax, xmax] (0–1000) around exactly the word, line, button or block of lines it is about.',
       'Build the explanation step by step, beat by beat, from what they can see. The first beat orients them ("see this function?"), the last one lands the idea.',
       req.depth === 'brief' ? 'Keep it short.' : req.depth === 'deep' ? 'Go a little deeper with the reasoning.' : '',
       req.assignment ? `This is a graded assignment (${req.assignment}): explain concepts and point at relevant parts, but never give the solution or write their answer.` : '',
@@ -125,6 +126,7 @@ function validMark(m: PlannedMark): boolean {
   if (!m || typeof m.kind !== 'string') return false;
   const okBox = Array.isArray(m.box_2d) && m.box_2d.length === 4 && m.box_2d.every((v) => Number.isFinite(v));
   const okPoint = Array.isArray(m.point) && m.point.length === 2 && m.point.every((v) => Number.isFinite(v));
+  if (m.kind === 'hover' || m.kind === 'follow_line' || m.kind === 'sweep') return okBox;
   if (m.kind === 'text') return Boolean(m.text) && (okBox || okPoint);
   if (m.kind === 'arrow') return okBox || okPoint;
   return okBox || (okPoint && (m.kind === 'step' || m.kind === 'check' || m.kind === 'cross'));

@@ -22,6 +22,10 @@ const SECTIONS: { id: Section; label: string }[] = [
 export function SettingsPage() {
   const [s, update] = useSettings();
   const [section, setSection] = useState<Section>('tutor');
+  // A saved key this build can't read: start where it can be pasted again.
+  useEffect(() => {
+    void ipc.invoke('secrets:status').then((k) => k.unreadable && setSection('models'));
+  }, []);
   if (!s) return null;
   return (
     <div className="page">
@@ -375,7 +379,10 @@ function ModelsSection({ s, update }: SectionProps) {
   return (
     <>
       <Group title="API key">
-        <Row title={status?.hasKey ? `Connected (${status.preview})` : 'No key — the demo tutor is used'} help={status?.source === 'env' ? 'Using GEMINI_API_KEY from the environment.' : 'Stored encrypted in your keychain.'}>
+        <Row
+          title={status?.hasKey ? `Connected (${status.preview})` : status?.unreadable ? 'Saved key can\'t be read by this copy of Pairwise' : 'No key — the demo tutor is used'}
+          help={status?.unreadable ? 'It was saved by another build (for example npm run dev). Paste it again below; until then the demo tutor is used.' : status?.source === 'env' ? 'Using GEMINI_API_KEY from the environment.' : 'Stored encrypted in your keychain.'}
+        >
           {status?.source === 'keychain' && (
             <Button size="s" variant="ghost" onClick={() => void ipc.invoke('secrets:clearApiKey').then(setStatus)}>
               Remove

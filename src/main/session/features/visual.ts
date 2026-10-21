@@ -3,7 +3,8 @@ import { inkId, type InkItem } from '@shared/ink';
 import { inkPenPoint } from '@shared/ink-geometry';
 import type { EncodedFrame } from '@shared/ipc';
 import type { TutorSession } from '../tutor';
-import { buildInk, noteFont, pointTip, type MarkSpec } from '../marks';
+import { buildInk, noteFont, pointTip, type MarkSpec, type MarkStyle } from '../marks';
+import { gestureSteps, type Gesture, type GestureStyle } from '../gestures';
 import { BeatSync } from '../beat-sync';
 import { GeminiBackend, Grounder, OcrBackend, type FrameSource, type GroundTarget, type GroundingBackend } from '../../vision/grounder';
 import { ScreenReader } from '../../vision/reader';
@@ -130,24 +131,36 @@ export class VisualFeature {
   }
 
   /**
-   * Draw ink with the cursor as the pen: swoop to each mark's start, trace it, next. Ink reveal
+   * Draw ink with the cursor as the pen: move to each mark's start, trace it, next. Ink reveal
    * times are the trace start times, so cursor and ink can never drift apart.
    */
-  play(items: InkItem[], at: number, finalLabel?: string, holdAfterMs = 3400): void {
-    if (!items.length) return;
+  play(items: InkItem[], at: number, finalLabel?: string, holdAfterMs = 2600): void {
+    this.perform(items.map((ink) => ({ ink })), at, finalLabel, holdAfterMs);
+  }
+
+  /**
+   * One choreography of ink and pointer gestures, in order (an explanation beat can follow a
+   * line, then circle a word). Gestures move the cursor only; ink appears as the pen traces it.
+   */
+  perform(seq: ({ ink: InkItem } | { gesture: Gesture })[], at: number, finalLabel?: string, holdAfterMs = 2600): void {
+    if (!seq.length) return;
     const now = Date.now();
     const steps: CursorStep[] = [];
-    for (const it of items) {
-      const start = inkPenPoint(it, 0);
+    const traceIndex = new Map<InkItem, number>();
+    for (const s of seq) {
+      if ('gesture' in s) {
+        steps.push(...gestureSteps(s.gesture));
+        continue;
+      }
+      const start = inkPenPoint(s.ink, 0);
       if (start) steps.push({ kind: 'fly', to: start, maxMs: 750 });
-      steps.push({ kind: 'trace', item: it });
+      traceIndex.set(s.ink, steps.length);
+      steps.push({ kind: 'trace', item: s.ink });
     }
+    const items = seq.flatMap((s) => ('ink' in s ? [s.ink] : []));
     const times = this.s.cursor.schedule(steps, Math.max(now, at), finalLabel, holdAfterMs);
-    let k = 0;
     for (const it of items) {
-      const hasFly = Boolean(inkPenPoint(it, 0));
-      const trace = times[k + (hasFly ? 1 : 0)];
-      k += hasFly ? 2 : 1;
+      const trace = times[traceIndex.get(it) ?? -1];
       it.revealAt = trace ? trace.startAt : Math.max(now, at);
     }
     // Cursor hidden or driving: ink still appears on time, without the pen.
@@ -158,6 +171,7 @@ export class VisualFeature {
         t += it.drawMs + 120;
       }
     }
+    if (!items.length) return;
     const g = items[0].group ?? this.group();
     const list = this.turnInk.get(g) ?? [];
     list.push(...items.map((i) => i.id));
@@ -286,6 +300,32 @@ export class VisualFeature {
       };
       this.s.addInk([ring]);
       this.lastMark = tip;
+      return { response: { ok: true, found: true } };
+    });
+
+    t.register('move_cursor', async (args, _call, signal) => {
+      const style = (['hover', 'follow_line', 'sweep'].includes(str(args.style)) ? str(args.style) : 'hover') as GestureStyle;
+      const target = str(args.target);
+      const display = this.displayFor(args);
+      const approx = this.approxPoint(args, display);
+      const at = this.speechTime();
+      // `box` = [ymin, xmin, ymax, xmax] in the latest frame (demo script / tests).
+      const box = Array.isArray(args.box) && args.box.length === 4 && this.s.modelFrame ? box2dToGlobal(this.s.modelFrame, args.box as Box2D) : undefined;
+      if (!target && !box) return { response: { ok: false, error: 'Say what to point at.' } };
+      // Hovering starts toward the tutor's own guess right away, like point_at.
+      if (style === 'hover' && approx && !box) this.s.cursor.schedule([{ kind: 'fly', to: approx.global }], at);
+      let rect = box;
+      if (!rect && target) {
+        const precise = style !== 'hover';
+        const [r] = await this.grounder.locate(display.id, [{ id: 'g', description: target, approx: approx?.norm, precise, control: !precise && namesControl(target) }], this.s.modelFrame, signal);
+        if (signal.aborted) return { response: { ok: false } };
+        if (r?.found && r.rect) rect = r.rect;
+      }
+      if (!rect) return { response: { ok: false, found: false, note: `Couldn't find "${target}" on screen. Describe it in words instead.` } };
+      const now = Date.now();
+      if (this.s.cursor.busyUntil > now) this.s.cursor.cancelFuture(now);
+      this.perform([{ gesture: { style, rect, lines: num(args.lines) } }], Math.max(now, at));
+      this.lastMark = rectCenter(rect);
       return { response: { ok: true, found: true } };
     });
 
@@ -423,17 +463,17 @@ export class VisualFeature {
     };
   }
 
-  /** Turn planned beats into ink and arm a BeatSync that fires each beat as its line is spoken. */
+  /** Turn planned beats into cursor moves and ink, fired by a BeatSync as each line is spoken. */
   scheduleBeats(beats: PlannedBeat[], frame: EncodedFrame, display: DisplayInfo): void {
-    const inkPerBeat = beats.map((b) => buildInk(b.marks.map((m) => planToSpec(m, frame)).filter((x): x is MarkSpec => x !== null), display.bounds, this.style()));
+    const seqs = beats.map((b) => beatSequence(b.marks, frame, display.bounds, this.style()));
     const sync = new BeatSync(
       beats.map((b, i) => ({
         text: b.say,
         start: (pos: number) => {
-          const ink = inkPerBeat[i];
-          if (!ink.length) return;
-          for (const it of ink) it.group = this.group();
-          this.play(ink, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS, beats[i].marks[0]?.label);
+          const seq = seqs[i];
+          if (!seq.length) return;
+          for (const s of seq) if ('ink' in s) s.ink.group = this.group();
+          this.perform(seq, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS);
         },
       })),
     );
@@ -469,6 +509,25 @@ export class VisualFeature {
   }
 }
 
+const GESTURES = new Set<string>(['hover', 'follow_line', 'sweep']);
+
+/**
+ * One beat's marks, in order, as things to do: pointer gestures (located in global DIP) and ink
+ * items. Order is kept, so "follow this line, then circle that word" happens that way round.
+ */
+export function beatSequence(marks: PlannedMark[], frame: EncodedFrame, display: Rect, style: MarkStyle): ({ ink: InkItem } | { gesture: Gesture })[] {
+  const out: ({ ink: InkItem } | { gesture: Gesture })[] = [];
+  for (const m of marks) {
+    if (GESTURES.has(m.kind)) {
+      if (m.box_2d?.length === 4) out.push({ gesture: { style: m.kind as GestureStyle, rect: box2dToGlobal(frame.ref, m.box_2d as Box2D) } });
+      continue;
+    }
+    const spec = planToSpec(m, frame);
+    if (spec) for (const ink of buildInk([spec], display, style)) out.push({ ink });
+  }
+  return out;
+}
+
 /** A planned mark (0–1000 of the planning frame) → a located mark in global DIP. */
 export function planToSpec(m: PlannedMark, frame: EncodedFrame): MarkSpec | null {
   const rect = m.box_2d && m.box_2d.length === 4 ? box2dToGlobal(frame.ref, m.box_2d as Box2D) : undefined;
@@ -482,17 +541,22 @@ export function planToSpec(m: PlannedMark, frame: EncodedFrame): MarkSpec | null
     case 'check':
     case 'cross':
       return { kind: m.kind, rect, at: pt, num: m.number, label: m.label };
+    case 'hover':
+    case 'follow_line':
+    case 'sweep':
+      return null; // pointer gestures, not ink (see beatSequence)
     default:
       return rect ? { kind: m.kind, rect: rect.width < 4 || rect.height < 4 ? inflateRect(rect, 6) : rect, label: m.label } : null;
   }
 }
 
 /** Demo mode (no key): a fixed little explanation in the middle of the screen. */
-function demoBeats(frame: EncodedFrame, _question: string): PlannedBeat[] {
+export function demoBeats(frame: EncodedFrame, _question: string): PlannedBeat[] {
   void frame;
   return [
-    { say: 'In demo mode I can\'t read your screen, but this is how an explanation looks.', marks: [{ kind: 'circle', box_2d: [380, 330, 470, 560], label: 'this part' }] },
-    { say: 'I mark the important part as I mention it,', marks: [{ kind: 'underline', box_2d: [520, 330, 560, 640] }] },
+    { say: 'In demo mode I can\'t read your screen, but this is how I walk you through something.', marks: [{ kind: 'sweep', box_2d: [380, 300, 560, 640] }] },
+    { say: 'I follow a line with my cursor while I talk about it,', marks: [{ kind: 'follow_line', box_2d: [410, 300, 450, 640] }] },
+    { say: 'I mark the important part only when it helps,', marks: [{ kind: 'circle', box_2d: [470, 300, 520, 470], label: 'this part' }] },
     { say: 'then connect it to the next idea.', marks: [{ kind: 'arrow', box_2d: [600, 600, 660, 720], point: [520, 760], text: 'next' }] },
   ];
 }

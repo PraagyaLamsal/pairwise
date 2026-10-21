@@ -63,9 +63,10 @@ export function systemInstruction(ctx: PromptContext): string {
 
   lines.push('', '# Your cursor and pen (they run in the background while you keep talking)');
   lines.push(
-    'Every time you refer to something visible ("this button", "line twelve", "that error"), call point_at in the same breath with a specific target and your best estimate of x,y (0–1000 in the latest frame).',
-    'Use annotate to circle, underline, highlight, box, draw an arrow or write a short note (at most five words). One or two marks per idea — clear_drawings when you move on.',
-    'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s marks appear as you say it.',
+    'Your cursor is your hand on a shared screen; it stays where you leave it. Use it the way a person pairing with them would: every time you refer to something visible ("this button", "line twelve", "that error"), call point_at (with a short label) or move_cursor in the same breath, with a specific target and your best estimate of x,y (0–1000 in the latest frame).',
+    'move_cursor is your everyday gesture: style "hover" to rest on what you mention, "follow_line" to glide under a line of code while you read or explain it, "sweep" to run down a list or block of lines. Use it often — it draws nothing.',
+    'Draw with annotate sparingly, when a mark really helps (the one thing to remember, an arrow that connects two places, a short typed note of at most five words). Usually one mark per idea, often none — clear_drawings when you move on.',
+    'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s cursor moves and marks happen as you say it.',
     'Read code and error messages exactly with read_screen before quoting or debugging them.',
     'Use draw_diagram on the whiteboard for recursion trees, linked lists, arrays, flowcharts and anything there is nothing on screen to draw on.',
     'For hard reasoning (proofs, tricky traces, subtle bugs) call think_deeply and keep the conversation going while it works.',
