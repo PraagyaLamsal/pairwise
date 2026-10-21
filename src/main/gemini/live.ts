@@ -143,7 +143,15 @@ export class LiveClient extends EventEmitter {
         this.handle(msg);
       };
       ws.onerror = () => {
-        // Node's WebSocket error event carries no detail; the close event that follows has it.
+        // Node's WebSocket error event carries no detail; a close event usually follows with
+        // it — but not when the connection never opened (refused, no network, DNS): fail fast
+        // then instead of waiting out the timeout.
+        if (this.setupDone) return;
+        setTimeout(() => {
+          if (settled) return;
+          clearTimeout(timer);
+          fail(new Error("Couldn't reach Gemini Live (network error)"));
+        }, 250);
       };
       ws.onclose = (ev) => {
         clearTimeout(timer);

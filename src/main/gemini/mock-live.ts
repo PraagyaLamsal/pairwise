@@ -204,8 +204,10 @@ export class MockLiveServer {
   }
 
   async stop(): Promise<void> {
+    // Stop accepting first, so a client that reconnects at once finds nobody there.
+    const closed = new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()));
     for (const c of this.conns) c.ws.close(1001, 'server stopping');
-    await new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()));
+    await closed;
     this.wss = null;
   }
 

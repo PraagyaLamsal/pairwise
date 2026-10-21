@@ -11,10 +11,21 @@ const FORWARDED = [
 
 export type LinkStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
+export interface LinkOptions {
+  /** Whether the Mac is online at all (Electron's net.isOnline); offline, it just waits. */
+  online?: () => boolean;
+  /** Keep trying to get back for this long after a drop before giving up (default 2 min). */
+  giveUpAfterMs?: number;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * One logical Live session across many WebSocket connections: connections last ~10 minutes, so
  * on GoAway (or an unexpected drop) we reconnect with the latest session-resumption handle and
- * the conversation continues where it was. Emits the LiveClient events plus 'status'.
+ * the conversation continues where it was. A dropped connection (flaky Wi-Fi, a laptop lid) is
+ * retried for up to two minutes, waiting while the Mac is offline. Emits the LiveClient events
+ * plus 'status' and 'reconnected' (with how long it was gone, ms).
  */
 export class LiveLink extends EventEmitter {
   private client: LiveClient | null = null;
@@ -27,6 +38,7 @@ export class LiveLink extends EventEmitter {
   constructor(
     private readonly url: () => string,
     private readonly setup: (handle?: string) => LiveSetup,
+    private readonly opts: LinkOptions = {},
   ) {
     super();
   }
@@ -78,7 +90,8 @@ export class LiveLink extends EventEmitter {
       }
       void this.reconnect(`closed ${info.code}`);
     });
-    await client.connect(this.setup(this.handle));
+    // Getting back after a drop: don't sit 15 s on one attempt that went nowhere.
+    await client.connect(this.setup(this.handle), this.reconnecting ? 8000 : 15_000);
     const old = this.client;
     this.client = client;
     this.attempts = 0;
@@ -93,26 +106,40 @@ export class LiveLink extends EventEmitter {
     this.reconnecting = true;
     this.reconnects += 1;
     this.setStatus('reconnecting');
+    const since = Date.now();
+    const limit = this.opts.giveUpAfterMs ?? 120_000;
+    const online = this.opts.online ?? (() => true);
+    let lastError: unknown = new Error(`connection lost (${reason})`);
+    let fresh = false;
     try {
       while (!this.closing) {
+        // Offline (Wi-Fi off, lid closed): wait for the network rather than spend attempts.
+        while (!this.closing && !online() && Date.now() - since < limit) await sleep(1000);
+        if (this.closing) return;
         const delay = this.attempts === 0 ? 0 : Math.min(8000, 500 * 2 ** (this.attempts - 1));
+        if (Date.now() - since + delay >= limit) break;
         this.attempts += 1;
-        if (delay) await new Promise((r) => setTimeout(r, delay));
+        if (delay) await sleep(delay);
+        if (this.closing) return;
         try {
           await this.connect();
-          log.info(`reconnected after ${reason}`);
-          this.emit('reconnected');
+          log.info(`reconnected after ${reason} (${Math.round((Date.now() - since) / 1000)} s${fresh ? ', fresh session' : ''})`);
+          this.emit('reconnected', Date.now() - since, fresh);
           return;
         } catch (e) {
+          lastError = e;
           log.warn(`reconnect attempt ${this.attempts} failed`, e);
-          if (this.attempts === 2) this.handle = this.handle ?? undefined;
-          if (this.attempts >= 6) {
-            this.setStatus('closed');
-            this.emit('fatal', e instanceof Error ? e : new Error(String(e)));
-            return;
+          // Online but still refused: the resumption handle may have expired. Carry on in a
+          // fresh session (the app tells the tutor where things were) rather than lose it.
+          if (online() && this.attempts >= 4 && this.handle) {
+            this.handle = undefined;
+            fresh = true;
           }
         }
       }
+      if (this.closing) return;
+      this.setStatus('closed');
+      this.emit('fatal', lastError instanceof Error ? lastError : new Error(String(lastError)));
     } finally {
       this.reconnecting = false;
     }

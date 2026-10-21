@@ -1,3 +1,4 @@
+import { net } from 'electron';
 import { GEMINI_API_BASE, GEMINI_LIVE_PATH } from '@shared/app-info';
 import type { IndexStatus, ResumeState, SearchHit } from '@shared/courses';
 import type { DisplayInfo, FrameRef } from '@shared/geometry';
@@ -210,7 +211,7 @@ export class TutorSession extends SessionController {
       const key = this.deps.settings.getApiKey();
       url = env.liveUrl ? `${env.liveUrl}${env.liveUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}` : liveUrl(GEMINI_API_BASE, GEMINI_LIVE_PATH, key);
     }
-    const link = new LiveLink(() => url, (handle) => this.buildSetup(handle));
+    const link = new LiveLink(() => url, (handle) => this.buildSetup(handle), { online: () => net.isOnline() });
     this.link = link;
     this.attachLink(link);
     const fresh = resume?.liveHandle && Date.now() - resume.liveHandle.savedAt < HANDLE_TTL_MS && resume.liveHandle.model === this.liveModel ? resume.liveHandle.handle : undefined;
@@ -406,6 +407,11 @@ export class TutorSession extends SessionController {
       else if (st === 'open' && this.snapshot.status === 'reconnecting') this.update({ status: 'live' });
     });
     link.on('fatal', (e: Error) => void this.end({ reason: 'connection lost', error: e.message }));
+    link.on('reconnected', (downMs: number, fresh: boolean) => {
+      // A real drop (not the routine ~10-minute GoAway handover): help her pick up the thread.
+      if (fresh) this.note(`[The connection dropped and had to start over. Where you were: ${this.recentContext()}. Pick up from there briefly.]`);
+      else if (downMs > 3000) this.note(`[The connection dropped for ${Math.round(downMs / 1000)} s and is back. Anything they said meanwhile was lost; check in briefly and carry on.]`);
+    });
     link.on('audio', (pcm: Buffer) => {
       this.generating = true;
       this.onTutorAudio(pcm);
@@ -807,6 +813,15 @@ export class TutorSession extends SessionController {
   // ===========================================================================
   // Resume state
   // ===========================================================================
+
+  /** The last few things said, in one line (for a tutor whose session had to start over). */
+  private recentContext(): string {
+    const said = this.transcript()
+      .filter((c) => c.speaker !== 'system' && c.text.trim())
+      .slice(-6)
+      .map((c) => `${c.speaker === 'student' ? 'student' : 'you'}: "${c.text.replace(/\s+/g, ' ').trim().slice(0, 160)}"`);
+    return said.length ? said.join('; ') : 'the session had just started';
+  }
 
   protected saveResume(extra: Partial<ResumeState> = {}): void {
     const course = this.course;

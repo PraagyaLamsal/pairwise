@@ -390,3 +390,15 @@ pointer, which neither capture contains, is drawn in where the scene moved it). 
 frames into small GIFs (60–110 KB each). Rejected: recording the X screen directly (the
 compositor's transparent overlays aren't in root-window captures) and screenshots in a loop
 (4–5 fps).
+
+### D-042 · A dropped connection doesn't end the session
+Flaky Wi-Fi, a captive portal or a closed lid used to end the session after ~15 s of failed
+reconnects. Now a drop is retried for up to two minutes (backoff 0.5 → 8 s), and while the Mac
+is offline (`net.isOnline()`) it simply waits for the network instead of using up attempts. The
+pill shows "reconnecting…" meanwhile. If the server keeps refusing while the network is up (an
+expired resumption handle), it carries on in a fresh Live session and tells Ada where things were
+(the last few lines said); after a real drop (> 3 s) she's told how long the connection was gone
+so she can check in. Found while testing this: when a connection never opened (refused, no
+network, DNS), Node's WebSocket fires `error` but no `close`, so every failed attempt — including
+starting a session offline — waited out the full 15 s timeout. It now fails within ~0.25 s
+with "Couldn't reach Gemini Live", and a reconnect attempt waits at most 8 s.
