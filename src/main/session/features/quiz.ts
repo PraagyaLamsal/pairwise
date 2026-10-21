@@ -14,6 +14,36 @@ const ANSWER_WAIT_MS = 90_000;
 /** The student's answer stays marked for a while (their highlight click). */
 const ANSWER_RING_MS = 4200;
 
+/** One quick check, for the session notes. */
+export interface QuizResult {
+  question: string;
+  outcome: 'right' | 'wrong' | 'skipped' | 'answered';
+}
+
+/**
+ * The session's quick checks as note lines (a question asked again after a hint counts once,
+ * with how many tries it took) and the ones still missed, to review next time.
+ */
+export function checksForNotes(results: QuizResult[]): { lines: string[]; missed: string[] } {
+  const groups: { question: string; outcomes: QuizResult['outcome'][] }[] = [];
+  for (const r of results) {
+    const last = groups[groups.length - 1];
+    if (last && last.question.toLowerCase() === r.question.toLowerCase()) last.outcomes.push(r.outcome);
+    else groups.push({ question: r.question, outcomes: [r.outcome] });
+  }
+  const tries = (n: number) => (n === 2 ? 'second try' : `${n} tries`);
+  const lines = groups.map((g) => {
+    const final = g.outcomes[g.outcomes.length - 1];
+    const n = g.outcomes.length;
+    if (final === 'right') return `✓ ${g.question}${n > 1 ? ` (${tries(n)})` : ''}`;
+    if (final === 'wrong') return `✗ ${g.question} — worth another look`;
+    if (final === 'skipped') return `– ${g.question} (skipped)`;
+    return `• ${g.question}`;
+  });
+  const missed = groups.filter((g) => ['wrong', 'skipped'].includes(g.outcomes[g.outcomes.length - 1])).map((g) => `Quick check to try again: “${g.question}”`);
+  return { lines, missed };
+}
+
 export interface AnswerResult {
   clicked: boolean;
   how: string;
@@ -48,6 +78,8 @@ export function ringStroke(p: Point, r = 14): { points: Point[] } {
  */
 export class QuizFeature {
   private pending: { resolve: (r: AnswerResult) => void; timer: NodeJS.Timeout } | null = null;
+  /** This session's quick checks (the notes list them). */
+  private results: QuizResult[] = [];
 
   constructor(private readonly s: TutorSession) {
     ipcMain.on('overlay:answer', (_e, m: { displayId: string; point: Point }) => {
@@ -62,6 +94,13 @@ export class QuizFeature {
   /** A question is waiting for the student's click. */
   get asking(): boolean {
     return this.pending !== null;
+  }
+
+  /** The quick checks so far, handed to the session notes (and forgotten here). */
+  takeResults(): QuizResult[] {
+    const r = this.results;
+    this.results = [];
+    return r;
   }
 
   private register(): void {
@@ -83,6 +122,7 @@ export class QuizFeature {
       const result = await this.waitForClick(question, signal);
       if (signal.aborted) return { response: { ok: false } };
       if (!result.clicked || !result.point) {
+        if (result.how === 'skipped' || result.how === 'timed out') this.results.push({ question, outcome: 'skipped' });
         return { response: { clicked: false, [result.how === 'timed out' ? 'timed_out' : 'skipped']: true, note: result.how === 'timed out' ? 'No answer yet. Ask whether they want a hint.' : 'They skipped it: give a hint, or show them.' }, scheduling: 'WHEN_IDLE' };
       }
       const p = result.point;
@@ -90,6 +130,7 @@ export class QuizFeature {
       // If she's pleased with it, the celebration goes off right where they clicked.
       this.s.visual.focusOn(p);
       const off = answerRect ? offTarget(answerRect, p) : null;
+      this.results.push({ question, outcome: off === null ? 'answered' : off === 0 ? 'right' : 'wrong' });
       // A fresh frame with their click drawn in, for the tutor to look at.
       const frame = await this.s.sendQuestionFrame({ color: this.s.settings.studentInkColor, strokes: [{ points: [p] }, ringStroke(p)] }, result.displayId ?? display.id);
       const ref = frame?.ref ?? this.s.modelFrame;

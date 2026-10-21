@@ -2,6 +2,7 @@
 // screen. The overlays take that one click with a real OS click (it never reaches the app
 // underneath), mark it with the student's highlight ring, and tell Ada whether it was on the
 // answer she had in mind. A wrong click says how far off it was; Esc skips.
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { launch, main, waitFor, sleep, artifacts, assert, FAKE_DISPLAYS, openTargetWindow, callTool, screenShot, pointer } from './harness.mjs';
 
@@ -126,7 +127,23 @@ try {
   assert.deepEqual([r4.clicked, r4.skipped], [false, true], JSON.stringify(r4));
   assert.deepEqual(await answering(), overlays.map(() => false), 'and the screen is back to normal');
 
-  console.log(`show me: right answer on target, wrong one ${r2.off_by_px} px off, the app underneath untouched, Esc skips`);
+  // --- 5. the checks end up in the session notes; the skipped one is there to review --------
+  await S(() => globalThis.__pairwise.session.end());
+  await waitFor(() => S(() => globalThis.__pairwise.session.snapshot.status === 'idle'), { label: 'ended', timeout: 15_000 });
+  const file = await S(async () => {
+    const s = globalThis.__pairwise.session;
+    await s.notesWriting;
+    return s.sessionNotes.lastFile;
+  });
+  const notes = file ? readFileSync(file, 'utf8') : null;
+  assert.ok(notes, 'notes were written');
+  assert.ok(notes.includes('## Quick checks'), 'with a quick checks section');
+  assert.ok(notes.includes('✓ Click the line where the recursion stops'), 'the first one, right');
+  assert.ok(notes.includes('✓ Click the button that runs the code (second try)'), 'the second, right on the second try');
+  assert.ok(notes.includes('– Click where n gets smaller (skipped)'), 'the skipped one');
+  assert.ok(/## To review[\s\S]*Quick check to try again: “Click where n gets smaller”/.test(notes), 'and the skipped one is to review next time');
+
+  console.log(`show me: right answer on target, wrong one ${r2.off_by_px} px off, the app underneath untouched, Esc skips, checks in the notes`);
   console.log('show-me e2e: all checks passed');
 } finally {
   await app.close().catch(() => undefined);

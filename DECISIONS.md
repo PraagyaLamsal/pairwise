@@ -375,7 +375,9 @@ same way she finds what she points at) and the result says whether the click was
 little slack for small targets — or how many pixels off, so she doesn't have to judge it from a
 low-detail frame. Esc (a global shortcut only while asking) or a right-click skips; it gives up
 after 90 s. Her cursor steps back while she waits so it doesn't give the answer away. The demo
-tutor has a "quiz me" turn. Considered: reading the click with global mouse hooks (needs
+tutor has a "quiz me" turn. The session notes list the checks ("✓ Click the line where the
+recursion stops", "✓ … (second try)", "– … (skipped)"), and a missed or skipped one goes under
+"To review", so "Pick up where we left off" brings it back. Considered: reading the click with global mouse hooks (needs
 Accessibility, and the click would also press whatever is under it), and multiple-choice cards
 (an extra panel to read; pointing at the real thing is the point).
 

@@ -29,3 +29,27 @@ describe('"Show me" answers (ask_to_point)', () => {
     expect(r.points[0].x).toBeCloseTo(r.points[r.points.length - 1].x, 5);
   });
 });
+
+const { checksForNotes } = await import('../../src/main/session/features/quiz');
+
+describe('quick checks in the session notes', () => {
+  it('lists each check once, with tries, and keeps the missed ones to review', () => {
+    const { lines, missed } = checksForNotes([
+      { question: 'Click the line where the recursion stops', outcome: 'right' },
+      { question: 'Click the button that runs the code', outcome: 'wrong' },
+      { question: 'Click the button that runs the code', outcome: 'right' },
+      { question: 'Click where n gets smaller', outcome: 'skipped' },
+      { question: 'Click the base case', outcome: 'wrong' },
+      { question: 'Point at anything', outcome: 'answered' },
+    ]);
+    expect(lines).toEqual([
+      '✓ Click the line where the recursion stops',
+      '✓ Click the button that runs the code (second try)',
+      '– Click where n gets smaller (skipped)',
+      '✗ Click the base case — worth another look',
+      '• Point at anything',
+    ]);
+    expect(missed).toEqual(['Quick check to try again: “Click where n gets smaller”', 'Quick check to try again: “Click the base case”']);
+    expect(checksForNotes([])).toEqual({ lines: [], missed: [] });
+  });
+});
