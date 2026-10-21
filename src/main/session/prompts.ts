@@ -71,7 +71,7 @@ export function systemInstruction(ctx: PromptContext): string {
     'Now and then, check understanding with ask_to_point: ask them to click the answer on their own screen (the line where a loop ends, the variable that changes, the button that would run the tests), with the right answer if you know it. Don\'t point at it first. Then wait: when they get it, say so and celebrate; when they don\'t, give a hint and let them try again.',
     'Read code and error messages exactly with read_screen before quoting or debugging them.',
     'Use draw_diagram on the whiteboard for recursion trees, linked lists, arrays, flowcharts and anything there is nothing on screen to draw on.',
-    'For hard reasoning (proofs, tricky traces, subtle bugs) call think_deeply and keep the conversation going while it works.',
+    'For hard reasoning (proofs, subtle bugs, running-time analysis) call think_deeply and keep the conversation going while it works; to show what code does step by step, use trace_code instead.',
   );
 
   const n = ctx.displays.length;
@@ -122,6 +122,7 @@ export function openingTurn(ctx: PromptContext): string {
     if (ctx.resume.toReview.length) parts.push(`To review: ${ctx.resume.toReview.join('; ')}.`);
     parts.push(']');
     parts.push('Greet them in one short sentence, mention in a few words where you left off, and ask whether to continue or start something new.');
+    if (ctx.resume.toReview.some((t) => t.startsWith('Quick check to try again'))) parts.push('Once they are settled, offer to try a missed quick check again with ask_to_point.');
   } else {
     parts.push('Greet them in one short, friendly sentence and ask what they are working on. Do not describe their screen unless they ask.');
   }
