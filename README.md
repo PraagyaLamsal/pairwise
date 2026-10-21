@@ -34,6 +34,12 @@ Built for macOS (v1), structured so Windows/Linux can follow (`src/main/platform
 These are real captures from the end-to-end tests (Linux/Xvfb, with the scripted demo tutor). On
 a Mac the system fonts and window chrome differ; the overlay, cursor and ink are the same.
 
+| She traces your code like a debugger | She points like a person on a call |
+|---|---|
+| ![Ada steps through factorial(2): value chips appear after each line and update in place](docs/screenshots/demo-trace.gif) | ![Ada sweeps down the function, follows a line, then rests on Run](docs/screenshots/demo-gestures.gif) |
+| **"Show me": she asks you to point at the answer** | **Her pen: Tuple's brush, a human hand, typed notes** |
+| ![Ada asks where the recursion stops; the student clicks the line; nice!](docs/screenshots/demo-show-me.gif) | ![Ada circles Run, underlines the signature, and arrows the base case with a typed note](docs/screenshots/demo-pen.gif) |
+
 | | |
 |---|---|
 | ![A quiet session: a small pill and Ada's dimmed cursor](docs/screenshots/idle-session.png) | **A quiet screen, like a Tuple call.** In an idle session there's the session pill at the top and Ada's cursor, resting where she left it at 35 % — nothing else. It fades almost away when your pointer comes near, and never follows you. |
@@ -123,6 +129,7 @@ npm run test:e2e     # the real app end to end (Playwright for Electron) against
                      # the quiet screen, cursor gestures and code traces (1× and 2×),
                      # Reduce motion, and "Show me" questions
 npm run eval:grounding   # with GEMINI_API_KEY set: the pointing-accuracy test using real Gemini
+node scripts/record-demos.mjs   # re-record the animated demos above (Linux, needs ffmpeg)
 ```
 
 The e2e suite is meant for Linux/CI (it runs inside a private Xvfb display). On a Mac it would

@@ -549,6 +549,11 @@ export class VisualFeature {
     }
   }
 
+  /** Where the attention is now (e.g. the student's answer): a celebration appears there. */
+  focusOn(p: Point): void {
+    this.lastMark = { ...p };
+  }
+
   celebrate(text: string, at?: Point): void {
     if (!this.s.settings.celebrate) return;
     const p = at ?? this.lastMark ?? this.s.cursor.position;

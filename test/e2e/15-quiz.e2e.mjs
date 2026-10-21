@@ -74,6 +74,20 @@ try {
   assert.deepEqual(await answering(), overlays.map(() => false), 'one click only: the overlays let clicks through again');
   const ring = await S(() => globalThis.__pairwise.session.ink.all().find((i) => i.author === 'student' && i.kind === 'ring'));
   assert.ok(ring && Math.hypot(ring.at.x - c2.x, ring.at.y - c2.y) < 3, `their click is marked with their highlight ring (${JSON.stringify(ring?.at)})`);
+  // When she's pleased, the celebration goes off where they clicked (not where her cursor is).
+  const cel = await S(() => {
+    const s = globalThis.__pairwise.session;
+    const send = s.overlays.send.bind(s.overlays);
+    let at = null;
+    s.overlays.send = (ch, payload, id) => {
+      if (ch === 'overlay:celebrate') at = payload.at;
+      return send(ch, payload, id);
+    };
+    s.visual.celebrate('nice!');
+    s.overlays.send = send;
+    return at;
+  });
+  assert.ok(cel && Math.hypot(cel.x - c2.x, cel.y - c2.y) < 3, `the celebration is at their answer (${JSON.stringify(cel)})`);
   await sleep(450);
   await screenShot(app, ids[0], join(artifacts, 'p15-answered-screen.png'));
 

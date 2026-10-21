@@ -87,6 +87,8 @@ export class QuizFeature {
       }
       const p = result.point;
       this.markAnswer(p);
+      // If she's pleased with it, the celebration goes off right where they clicked.
+      this.s.visual.focusOn(p);
       const off = answerRect ? offTarget(answerRect, p) : null;
       // A fresh frame with their click drawn in, for the tutor to look at.
       const frame = await this.s.sendQuestionFrame({ color: this.s.settings.studentInkColor, strokes: [{ points: [p] }, ringStroke(p)] }, result.displayId ?? display.id);

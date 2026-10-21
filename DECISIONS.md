@@ -378,3 +378,13 @@ after 90 s. Her cursor steps back while she waits so it doesn't give the answer 
 tutor has a "quiz me" turn. Considered: reading the click with global mouse hooks (needs
 Accessibility, and the click would also press whatever is under it), and multiple-choice cards
 (an extra panel to read; pointing at the real thing is the point).
+
+### D-041 · The README's animations are recorded from the real app
+`scripts/record-demos.mjs` runs the app the way the e2e tests do (Xvfb, demo tutor, OCR for
+grounding) and records each scene by subscribing to the overlay's own painted frames
+(`beginFrameSubscription`) and laying them over one capture of the screen beneath, so the motion
+is as smooth as the overlay draws it, however slow screen capture is under Xvfb (the student's
+pointer, which neither capture contains, is drawn in where the scene moved it). ffmpeg turns the
+frames into small GIFs (60–110 KB each). Rejected: recording the X screen directly (the
+compositor's transparent overlays aren't in root-window captures) and screenshots in a loop
+(4–5 fps).

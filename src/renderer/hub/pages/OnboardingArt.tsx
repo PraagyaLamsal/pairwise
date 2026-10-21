@@ -1,8 +1,9 @@
 import './onboarding-art.css';
 
 /**
- * Looping illustration of a session: the tutor's cursor swoops to the base case, circles it
- * and labels it, then the student underlines the recursive call.
+ * Looping illustration of a session, drawn the way Ada really looks (flat cursor, flat
+ * round-ended ink, typed notes): her cursor goes to the base case, circles it and types a note,
+ * then the student underlines the recursive call in their own colour.
  */
 export function OnboardingArt() {
   return (
@@ -28,16 +29,16 @@ export function OnboardingArt() {
           <path className="arrow-head" pathLength={1} d="M 147 44 L 139 53 L 151 56" />
           <path className="underline" pathLength={1} d="M 136 117 C 172 120, 222 114, 264 118" />
         </svg>
-        <div className="ob-note">base case</div>
+        <div className="ob-note">
+          {[...'base case'].map((ch, i) => (
+            <span key={i} style={{ animationDelay: `${i * 70}ms` }}>
+              {ch}
+            </span>
+          ))}
+        </div>
         <div className="ob-cursor">
-          <svg width="22" height="22" viewBox="0 0 22 22">
-            <path d="M3 2 L19 10.4 L11.7 12.4 L8.4 19.6 Z" fill="url(#cg)" stroke="#d6e6ff" strokeWidth="1.2" strokeLinejoin="round" />
-            <defs>
-              <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#8ab8ff" />
-                <stop offset="1" stopColor="#2f7bff" />
-              </linearGradient>
-            </defs>
+          <svg width="26" height="26" viewBox="0 0 26 26">
+            <path d="M3 3 L3 20.6 L7.4 16.6 L10.4 23.4 L13.5 22.1 L10.6 15.4 L16.6 15.4 Z" fill="#2f7bff" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" />
           </svg>
           <span className="ob-label">Ada</span>
         </div>
