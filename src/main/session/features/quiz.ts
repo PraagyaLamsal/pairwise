@@ -159,10 +159,12 @@ export class QuizFeature {
   private waitForClick(question: string, signal: AbortSignal): Promise<AnswerResult> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => this.finish({ clicked: false, how: 'timed out' }), ANSWER_WAIT_MS);
-      this.pending = { resolve, timer };
+      const entry = { resolve, timer };
+      this.pending = entry;
       this.setAnswerMode(true, question);
       this.s.setActivity('waiting');
-      signal.addEventListener('abort', () => this.finish({ clicked: false, how: 'cancelled' }));
+      // Only this question: by then a newer one may be the one waiting.
+      signal.addEventListener('abort', () => this.pending === entry && this.finish({ clicked: false, how: 'cancelled' }));
     });
   }
 
