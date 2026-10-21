@@ -293,7 +293,8 @@ export class TutorSession extends SessionController {
         ...(deep ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
       },
       systemInstruction: { parts: [{ text: systemInstruction({ ...ctx, settings: s }) }] },
-      tools: liveTools((name) => this.tools.has(name)),
+      // Quick checks turned off: the tutor doesn't get the tool at all.
+      tools: liveTools((name) => this.tools.has(name) && !(name === 'ask_to_point' && s.quickChecks === 'off')),
       realtimeInputConfig: {
         automaticActivityDetection: {
           disabled: false,

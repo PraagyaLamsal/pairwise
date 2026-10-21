@@ -213,6 +213,7 @@ then link `/tmp/comp1405`). Open some code or a slide on screen.
    her**: a one-line question appears at the bottom ("Click the line where the recursion stops")
    and the screen gets a thin orange edge. Click the answer: your click is marked with your own
    ring, it doesn't reach the app underneath, and she tells you whether you got it. Esc skips.
+   *(How often she asks: Settings → Tutor → Quick checks.)*
 5. Ask "clear that" (or ⌃⌥C).
 6. **Setup & checks → Pointing accuracy → Start test** (during a session): labelled buttons appear
    on every display, she finds each on a real screenshot and you see how many pixels off she was.

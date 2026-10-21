@@ -377,7 +377,9 @@ low-detail frame. Esc (a global shortcut only while asking) or a right-click ski
 after 90 s. Her cursor steps back while she waits so it doesn't give the answer away. The demo
 tutor has a "quiz me" turn. The session notes list the checks ("✓ Click the line where the
 recursion stops", "✓ … (second try)", "– … (skipped)"), and a missed or skipped one goes under
-"To review", so "Pick up where we left off" brings it back. Considered: reading the click with global mouse hooks (needs
+"To review", so "Pick up where we left off" brings it back. How often she asks is the
+student's call: Settings → Tutor → Quick checks (Often / Sometimes, the default / Off; Off also
+leaves the tool out of the session). Considered: reading the click with global mouse hooks (needs
 Accessibility, and the click would also press whatever is under it), and multiple-choice cards
 (an extra panel to read; pointing at the real thing is the point).
 

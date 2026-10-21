@@ -85,6 +85,17 @@ function TutorSection({ s, update }: SectionProps) {
             onChange={(explanationDepth) => void update({ explanationDepth })}
           />
         </Row>
+        <Row title="Quick checks" help={`Now and then ${s.tutorName} asks you to click the answer on your screen ("show me where the loop ends"), to check you've got it.`}>
+          <Segmented
+            value={s.quickChecks}
+            options={[
+              { value: 'often', label: 'Often' },
+              { value: 'sometimes', label: 'Sometimes' },
+              { value: 'off', label: 'Off' },
+            ]}
+            onChange={(quickChecks) => void update({ quickChecks })}
+          />
+        </Row>
       </Group>
       <Group title="Conversation">
         <Row title="Talk mode" help="Hands-free listens all the time and lets you interrupt. Hold-to-talk only listens while you hold the ask keys.">

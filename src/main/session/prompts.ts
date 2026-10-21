@@ -25,6 +25,14 @@ const DEPTH: Record<Settings['explanationDepth'], string> = {
   deep: 'Go deep: build intuition, show the reasoning and a worked example, and connect it to earlier material.',
 };
 
+const CHECK_HOW = 'ask them to click the answer on their own screen (the line where a loop ends, the variable that changes, the button that would run the tests), with the right answer if you know it. Don\'t point at it first. Then wait: when they get it, say so and celebrate; when they don\'t, give a hint and let them try again.';
+
+const QUICK_CHECKS: Record<Settings['quickChecks'], string> = {
+  often: `Check understanding often with ask_to_point — after each idea you explain: ${CHECK_HOW}`,
+  sometimes: `Now and then, check understanding with ask_to_point: ${CHECK_HOW}`,
+  off: 'They turned quick checks off: don\'t quiz them unless they ask you to.',
+};
+
 /** The Live model's system instruction. Kept compact: it's re-read on every turn. */
 export function systemInstruction(ctx: PromptContext): string {
   const { settings: s, course } = ctx;
@@ -68,7 +76,7 @@ export function systemInstruction(ctx: PromptContext): string {
     'Draw with annotate sparingly, when a mark really helps (the one thing to remember, an arrow that connects two places, a short typed note of at most five words). Usually one mark per idea, often none — clear_drawings when you move on.',
     'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s cursor moves and marks happen as you say it.',
     'When they want to know what code actually does when it runs (what it returns or prints, a variable\'s value at some point, how a loop or recursion unfolds), call trace_code: your cursor steps through the lines as you say the returned script and the values appear beside each line, like a debugger.',
-    'Now and then, check understanding with ask_to_point: ask them to click the answer on their own screen (the line where a loop ends, the variable that changes, the button that would run the tests), with the right answer if you know it. Don\'t point at it first. Then wait: when they get it, say so and celebrate; when they don\'t, give a hint and let them try again.',
+    QUICK_CHECKS[s.quickChecks],
     'Read code and error messages exactly with read_screen before quoting or debugging them.',
     'Use draw_diagram on the whiteboard for recursion trees, linked lists, arrays, flowcharts and anything there is nothing on screen to draw on.',
     'For hard reasoning (proofs, subtle bugs, running-time analysis) call think_deeply and keep the conversation going while it works; to show what code does step by step, use trace_code instead.',
@@ -122,7 +130,7 @@ export function openingTurn(ctx: PromptContext): string {
     if (ctx.resume.toReview.length) parts.push(`To review: ${ctx.resume.toReview.join('; ')}.`);
     parts.push(']');
     parts.push('Greet them in one short sentence, mention in a few words where you left off, and ask whether to continue or start something new.');
-    if (ctx.resume.toReview.some((t) => t.startsWith('Quick check to try again'))) parts.push('Once they are settled, offer to try a missed quick check again with ask_to_point.');
+    if (ctx.settings.quickChecks !== 'off' && ctx.resume.toReview.some((t) => t.startsWith('Quick check to try again'))) parts.push('Once they are settled, offer to try a missed quick check again with ask_to_point.');
   } else {
     parts.push('Greet them in one short, friendly sentence and ask what they are working on. Do not describe their screen unless they ask.');
   }

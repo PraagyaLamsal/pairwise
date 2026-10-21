@@ -6,6 +6,8 @@ export type SpeakingSpeed = 'slower' | 'normal' | 'faster';
 export type ExplanationDepth = 'brief' | 'standard' | 'deep';
 /** How Ada writes notes on screen: typed in the system font (like Tuple) or handwritten. */
 export type NoteStyle = 'typed' | 'handwritten';
+/** How often Ada checks understanding with "Show me" questions (ask_to_point). */
+export type QuickChecks = 'often' | 'sometimes' | 'off';
 export type InkFade = 'after-speech' | 'manual';
 export type AutoPauseMedia = 'smart' | 'media-key' | 'off';
 export type LiveMediaResolution = 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
@@ -33,6 +35,7 @@ export interface Settings {
   /** Pitch-preserving playback rate applied locally (0.75–1.4). */
   playbackRate: number;
   explanationDepth: ExplanationDepth;
+  quickChecks: QuickChecks;
   talkMode: TalkMode;
   captions: boolean;
   tutorColor: string;
@@ -107,6 +110,7 @@ export function defaultSettings(): Settings {
     speakingSpeed: 'normal',
     playbackRate: 1,
     explanationDepth: 'standard',
+    quickChecks: 'sometimes',
     talkMode: 'hands-free',
     captions: false,
     tutorColor: '#2F7BFF',
