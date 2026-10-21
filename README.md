@@ -45,7 +45,7 @@ overlay, cursor and ink are the same.
 | **"Show me": she asks you to point at the answer** | **Her pen: Tuple's brush, a human hand, typed notes** |
 | ![Ada asks where the recursion stops; the student clicks the line; nice!](docs/screenshots/demo-show-me.gif) | ![Ada circles Run, underlines the signature, and arrows the base case with a typed note](docs/screenshots/demo-pen.gif) |
 | **Her marks stay with what they mark** | |
-| ![Ada traces fib(3); the student scrolls; the value chips move with their lines](docs/screenshots/demo-sticky.gif) | Scroll while she explains and her chips, circles and arrows come along with the code — the marks still to come land on the right lines too. Switch to another app or tab and they hide until you come back. |
+| ![Ada traces fib(3); the student scrolls down and back up; the value chips move with their lines, and the first one hides under the header and comes back](docs/screenshots/demo-sticky.gif) | Scroll while she explains and her chips, circles and arrows come along with the code — the marks still to come land on the right lines too. A mark whose line goes under the header hides, and comes back with it. Switch to another app or tab and they hide until you come back. |
 
 | | |
 |---|---|

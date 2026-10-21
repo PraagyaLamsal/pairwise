@@ -455,9 +455,10 @@ has moved for 2 s):
   Reduce motion). The turn's marks still to come move too, and so does her cursor if it was
   pointing there. A mark whose own line scrolled out of view (under a header, out of the
   pane) is parked — hidden, still moving with its group — and comes back when its line does:
-  the engine remembers how that line looked and checks for it where the group's movement
-  says it should be. (A group with nothing left in view can't be followed; its parked marks
-  stay hidden.)
+  the engine remembers how that line looked when the marks were made (by the time it's lost
+  it may already be half under the header) and checks for it where the group's movement says
+  it should be. (A group with nothing left in view can't be followed; its parked marks stay
+  hidden.)
 - **Gone** (another app or tab, a closed file) → the marks hide rather than point at the wrong
   thing (it has to stay changed for ~1 s, so a flicker hides nothing), and the rest of the
   turn's marks are dropped. The engine keeps the last good view of what they marked and looks
@@ -470,14 +471,29 @@ target, else its own outline). The engine grabs the screen at half a pixel per D
 and scores each anchor against its earlier look relative to its own texture (identical ≈ 0,
 half a pixel off ≈ 0.35 — captures are area-averaged, so that can't be interpolated away — a
 pixel and a half ≈ 1.1, unrelated content ≥ 1.5). A coarse-to-fine vertical search (whole
-pixels on a subsample, then quarter pixels) finds the scroll, and the group's verdict is a vote
-of its anchors weighted by texture. Details that each fixed a real failure:
+pixels on a subsample, then quarter pixels around the best three distinct shifts) finds the
+scroll, and the group's verdict is a vote of its anchors weighted by texture. Details that each
+fixed a real failure:
 - A part that can't be seen (masked, off the image) is unknown, not a mismatch.
-- A line half under a header that doesn't scroll is still followed: when the plain search can't
-  agree, a second one lets pixels that are unchanged in place count as explained (only for
-  moves of 2 px and more — for tiny ones, a glyph's moved edges would match the glyph itself
-  one pixel along). A mark is "lost" only if its line went off screen or under something that
-  doesn't scroll (where it went, the screen looks as it did).
+- **Still bands.** Rows where nothing changed at all, at least 6 px (12 DIP) of them in a row
+  across the marks' width, are something that doesn't scroll: a header, a toolbar, the desktop
+  around a window (the gaps between lines of text are thinner). A pixel on one, or one that
+  would land under one, says nothing about where the content went, at any shift; a hidden part
+  costs about what a poor match does, and agreement is counted among what can be seen. So a
+  line half under the header is followed by its visible half, and content can only be
+  confirmed where the screen changed. A mark is "lost" when its line is (almost) all hidden or
+  off the screen, or where it went the screen looks as it did. (This replaced a second,
+  "static-tolerant" search, which counted pixels unchanged in place as explained: on the last
+  half pixel of a scroll, nearly everything is unchanged, and it found a 72 px jump.)
+- **Look-alikes.** A real half-pixel scroll scores worse at whole pixels than a line that looks
+  alike (`    return a` is how `    return n * factorial(n - 1)` begins, five lines on), so the
+  three best whole-pixel shifts each get the quarter-pixel look, not just the winner. A move
+  that only part of the group backs (the rest is visible and doesn't match) is taken only if no
+  other shift comes within 0.1. Within a pixel of where it was but not quite matching, with
+  nothing else close, is "unsure" (leave the marks; the snap below lines them up).
+  The README scene's 120 px scroll and back, which once left the chips five lines off, is
+  replayed from real captures in the unit tests (`test/fixtures/sticky`;
+  `scripts/debug/sticky-dump.mjs` and `replay-track.mts` record and replay such runs).
 - A partial change that holds still (a tooltip that stays, typing) becomes the new reference,
   so it can't add up to "gone" later; areas that change in every sample (a playing video, an
   animation — the engine's motion grid) are treated as unknown.

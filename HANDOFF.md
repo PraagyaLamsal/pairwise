@@ -26,7 +26,11 @@ keep it current: tick items, add findings, record decisions in DECISIONS.md.
   step, a covered whiteboard). And Ada's marks now stay with what they mark: the engine follows
   what's under them (`src/renderer/engine/ink-track.ts`, driven by
   `src/main/session/features/sticky.ts`), so a scroll moves them (and the turn's marks still to
-  come) and switching apps clears them. e2e `16-sticky` at 1× and 2× (21 runs in all).
+  come). A mark whose line scrolls out of view hides and comes back with it; switching apps
+  hides them, and switching back brings them back. e2e `16-sticky` at 1× and 2× (21 runs in all).
+  The hub got a screenshot tour too (D-047).
+* **All of round 2 is merged into `main`** (PR #1, at the owner's request, 2026-10-21). Work
+  after that goes on a branch from `main` and in again by PR.
 
 ## Fixed since: sticky ink drifted after a big scroll
 
