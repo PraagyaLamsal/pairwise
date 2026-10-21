@@ -97,11 +97,13 @@ export function underlinePoints(r: Rect, seed: number): Point[] {
   const amp = Math.min(1.2, r.height * 0.05);
   const ph = rand() * Math.PI * 2;
   const hook = rand() < 0.35 ? between(rand, 3, 6) : 0;
+  // The flick at the end rises no higher than the bottom of the word: it never cuts into it.
+  const lift = Math.min(hook, Math.max(0, y + rise * 0.5 - amp - (r.y + r.height) + 1));
   const pts: Point[] = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const end = t > 0.92 ? Math.pow((t - 0.92) / 0.08, 2) : 0;
-    pts.push({ x: x1 + (x2 - x1) * t - end * hook * 0.6, y: y + rise * (t - 0.5) + sag * Math.sin(t * Math.PI) + Math.sin(t * Math.PI * 2.2 + ph) * amp - end * hook });
+    pts.push({ x: x1 + (x2 - x1) * t - end * hook * 0.6, y: y + rise * (t - 0.5) + sag * Math.sin(t * Math.PI) + Math.sin(t * Math.PI * 2.2 + ph) * amp - end * lift });
   }
   return pts;
 }

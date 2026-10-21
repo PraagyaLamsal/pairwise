@@ -202,6 +202,14 @@ body {
   0%, 100% { opacity: 0.3; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-2px); }
 }
+/* Reduce motion: the thinking dots only brighten in turn; they don't bounce. */
+@keyframes dots-still {
+  0%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tutor-dots span { animation-name: dots-still; }
+}
 .tutor-name {
   font-weight: 650;
   font-size: 12.5px;

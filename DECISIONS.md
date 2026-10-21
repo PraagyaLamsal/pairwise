@@ -334,3 +334,31 @@ line, and treats words Tesseract put on separate lines as one row when they sit 
 Considered: drawing values as typed notes (they read as commentary, not state), a separate
 panel with a trace table (takes the student's eyes off their code), and keeping a history on
 each chip ("i = 0 → 1 → 2"; long and noisy; the spoken trace carries the history).
+
+### D-038 · An idle session costs (almost) nothing
+A session runs for an hour on a laptop, so idle cost matters. Measured per process under Xvfb
+(software rendering, so absolute numbers are higher than on a Mac; the proportions hold): an
+idle session went from ~41 % of one core to ~22 %, and with the student's mouse moving from ~47 %
+to ~25 %. What changed: (1) the overlays' render loop sleeps when nothing moves — it wakes on an
+event or with a timer for the next scheduled change (a mark due to appear, a fade, a waiting
+ring's next pulse) instead of running at 60 fps forever (4.5 % → 0.1 % each); (2) the student's
+pointer is only sent to the overlays when it's near one of their cards or chips (which fade out
+of its way), not on every mouse move; (3) main's cursor tick runs at 30 Hz, and at 60 Hz only
+while driving (overlays animate every other move themselves; `cursor.position` is computed
+exactly between ticks); (4) mic and voice levels are sent only when they change, and the muted
+mic (or the closed hold-to-talk gate) is disconnected from the capture worklet — the device
+stays open, so unmuting is instant; (5) the per-second session tick no longer re-broadcasts the
+whole snapshot to every window when only the clock moved (the pill keeps its own timer); (6) the
+cursor's keep-alive frame is every 5 s instead of every second. Tried and dropped: capturing
+the screen at 2 fps instead of 4 (no measurable gain; frames for grounding stay fresher at 4).
+
+### D-039 · macOS "Reduce motion" is respected
+Read from `systemPreferences.getAnimationSettings()` in main and `prefers-reduced-motion` in the
+windows (`PAIRWISE_REDUCED_MOTION=1/0` forces it, for tests). With it on: Ada's cursor moves in a
+straight line in at most ~0.26 s instead of an eased swoop (it still travels, so the student can
+see where she went); a highlight click is one still ring that fades instead of an expanding
+double pulse, and a ring waiting for a click doesn't keep pulsing; step badges fade in without
+the pop and ripple; a celebration is just the word, no confetti; cursor labels appear at once;
+cards, toasts and consent prompts fade in instead of sliding or springing; the driving frame
+stops breathing; the pill's thinking dots brighten in turn without bouncing. Typing (notes,
+value chips) and fades are kept: they reveal content rather than move it.

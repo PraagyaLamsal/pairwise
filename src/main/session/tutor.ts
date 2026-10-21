@@ -92,6 +92,8 @@ export class TutorSession extends SessionController {
   private thinkingTimer: NodeJS.Timeout | null = null;
   private displayTimer: NodeJS.Timeout | null = null;
   private lastLevelsAt = 0;
+  private lastLevels = { mic: -1, out: -1 };
+  private levelsTimer: NodeJS.Timeout | null = null;
   private micLevel = 0;
   private warnedBudget = false;
   private detach: (() => void)[] = [];
@@ -369,12 +371,24 @@ export class TutorSession extends SessionController {
 
   private pushLevels(): void {
     const now = Date.now();
-    if (now - this.lastLevelsAt < 50) return;
-    this.lastLevelsAt = now;
+    if (now - this.lastLevelsAt < 50) {
+      // Levels now arrive only when they change: never drop the last one (e.g. back to silence).
+      if (!this.levelsTimer) {
+        this.levelsTimer = setTimeout(() => {
+          this.levelsTimer = null;
+          this.pushLevels();
+        }, 50 - (now - this.lastLevelsAt));
+      }
+      return;
+    }
     const mic = this.snapshot.muted ? 0 : this.micLevel;
-    const out = this.playback.playing ? Math.min(1, this.playback.level * 4) : 0;
-    this.deps.hud.window?.webContents.send('session:levels', { mic, out });
+    const out = this.playback.playing ? Math.round(Math.min(1, this.playback.level * 4) * 50) / 50 : 0;
     this.cursor.setLevel(this.snapshot.activity === 'speaking' ? out : this.snapshot.activity === 'listening' ? mic : 0);
+    // Silence stays silent: the pill isn't re-rendered twenty times a second with zeros.
+    if (mic === this.lastLevels.mic && out === this.lastLevels.out) return;
+    this.lastLevelsAt = now;
+    this.lastLevels = { mic, out };
+    this.deps.hud.window?.webContents.send('session:levels', { mic, out });
   }
 
   // ===========================================================================

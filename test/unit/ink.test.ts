@@ -295,6 +295,13 @@ describe('human pen', () => {
         expect(p.y).toBeLessThan(word.y + word.height + 14);
       }
     }
+    // Not even the flick at the end cuts into the word, whatever the size (a 2× code font is small).
+    for (const h of [12, 16, 22, 30]) {
+      const w = { x: 200, y: 300, width: 9 * h * 0.6, height: h };
+      for (let i = 0; i < 300; i++) {
+        for (const p of underlinePoints(w, 5 + i * 7919)) expect(p.y).toBeGreaterThanOrEqual(w.y + w.height - 1.01);
+      }
+    }
   });
 
   it('draws ~30% slower than before, with each stroke easing in and out and slowing into corners', () => {

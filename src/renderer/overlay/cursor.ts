@@ -36,6 +36,8 @@ export class CursorView {
   private tutorColor: string;
   private mode: 'frames' | 'segment' | 'parked' = 'frames';
   private lastSegEnd: number | null = null;
+  /** macOS "Reduce motion": labels appear at once instead of typing themselves in. */
+  reducedMotion = false;
 
   constructor(
     root: HTMLElement,
@@ -103,6 +105,23 @@ export class CursorView {
 
   get animating(): boolean {
     return this.segs.length > 0;
+  }
+
+  /** When the cursor next needs drawing: now while it moves (or follows main's frames), else when its next move starts. */
+  nextChange(now: number): number {
+    if (this.segs.length) {
+      const s = this.segs[0];
+      return now >= s.startAt - 16 ? now : s.startAt - 16;
+    }
+    // Following main's frames (driving): keep interpolating briefly after the last one, unless
+    // the cursor isn't moving (the frame only carried the student's pointer).
+    const f = this.latest;
+    if (f && this.mode === 'frames' && now < f.t + INTERP_DELAY_MS + 80) {
+      const prev = this.frames[this.frames.length - 2];
+      const still = prev && prev.pos.x === f.pos.x && prev.pos.y === f.pos.y && this.pos.x === f.pos.x && this.pos.y === f.pos.y;
+      if (!still) return now;
+    }
+    return Infinity;
   }
 
   private positionAtTime(t: number): Point {
@@ -226,7 +245,7 @@ export class CursorView {
   private streamLabel(text: string, animate: boolean): void {
     if (this.streamTimer) window.clearTimeout(this.streamTimer);
     this.label.classList.toggle('empty', !text);
-    if (!animate) {
+    if (!animate || this.reducedMotion) {
       this.labelText.textContent = text;
       return;
     }

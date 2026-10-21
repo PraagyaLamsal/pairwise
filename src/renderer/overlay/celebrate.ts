@@ -28,6 +28,8 @@ const LIFE = 1500;
 /** A small burst of confetti and a word that pops in — for when the student gets it right. */
 export class Celebrations {
   private bursts: Burst[] = [];
+  /** macOS "Reduce motion": just the word, fading in and out (no confetti, no pop). */
+  reducedMotion = false;
   constructor(private colors: string[]) {}
 
   setColors(colors: string[]): void {
@@ -37,7 +39,7 @@ export class Celebrations {
   add(c: Celebration): void {
     const rand = rng(Math.floor(c.startAt) % 100000);
     const particles: Particle[] = [];
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < (this.reducedMotion ? 0 : 42); i++) {
       const a = -Math.PI / 2 + (rand() - 0.5) * Math.PI * 1.1;
       const speed = 260 + rand() * 360;
       particles.push({
@@ -95,11 +97,11 @@ export class Celebrations {
       }
       // the word ("nice!") pops above the burst, in the tutor's colour, no glow
       const pt = Math.min(1, t / 320);
-      const pop = pt < 1 ? 1 + 0.18 * Math.sin(pt * Math.PI) : 1;
+      const pop = pt < 1 && !this.reducedMotion ? 1 + 0.18 * Math.sin(pt * Math.PI) : 1;
       const fade = t > LIFE - 450 ? Math.max(0, 1 - (t - (LIFE - 450)) / 450) : 1;
       ctx.save();
-      ctx.globalAlpha = fade * Math.min(1, t / 120);
-      ctx.translate(b.at.x, b.at.y - 34 - 12 * Math.min(1, t / 600));
+      ctx.globalAlpha = fade * Math.min(1, t / (this.reducedMotion ? 200 : 120));
+      ctx.translate(b.at.x, b.at.y - 34 - (this.reducedMotion ? 6 : 12 * Math.min(1, t / 600)));
       ctx.scale(pop, pop);
       ctx.font = `700 26px ${font}`;
       ctx.textAlign = 'center';

@@ -92,9 +92,22 @@ try {
   assert.deepEqual(pill.buttons, ['mic', 'hud-btn', 'end'], `only mic, eye and End are buttons (${pill.buttons})`);
   const hudBounds = await S(() => globalThis.__pairwise.hud.bounds());
   assert.ok(hudBounds.width < 300 && hudBounds.height < 60, `the window is small too (${JSON.stringify(hudBounds)})`);
+  // And costs (almost) nothing: an idle overlay asks for no animation frames (battery).
+  const idleFrames = await ov.evaluate(async () => {
+    let n = 0;
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => {
+      n++;
+      return raf(cb);
+    };
+    await new Promise((r) => setTimeout(r, 2000));
+    window.requestAnimationFrame = raf;
+    return n;
+  });
+  assert.ok(idleFrames <= 4, `an idle overlay sleeps (${idleFrames} frames in 2 s; it used to draw 120)`);
   await screenShot(app, ids[0], join(artifacts, 'p11-idle-session-screen.png'));
   await hud.screenshot({ path: join(artifacts, 'p11-hud-pill.png') });
-  console.log(`idle session: pill ${Math.round(pill.width)} px at ${pill.opacity} opacity, cursor at ${idle.cursor.opacity}, ${idle.ui.length} other overlay elements`);
+  console.log(`idle session: pill ${Math.round(pill.width)} px at ${pill.opacity} opacity, cursor at ${idle.cursor.opacity}, ${idle.ui.length} other overlay elements, ${idleFrames} overlay frames in 2 s`);
 
   // --- 2. hover opens it; it closes again; drag remembers the spot per display ---------------
   await hud.hover('.hud .timer');

@@ -633,3 +633,31 @@ body.drawing::after {
     transform: rotate(360deg);
   }
 }
+
+/* ---------- macOS "Reduce motion" ----------
+ * Set from the system setting (and by main for tests): cards and toasts fade in instead of
+ * sliding or popping, the driving frame stops breathing, labels don't scale. Fades stay. */
+body.reduced-motion .step-card,
+body.reduced-motion .consent,
+body.reduced-motion .toast,
+body.reduced-motion .citation,
+body.reduced-motion .cal-found,
+body.reduced-motion .cal-tag {
+  animation-name: rm-fade !important;
+  animation-timing-function: ease-out !important;
+}
+@keyframes rm-fade {
+  from {
+    opacity: 0;
+  }
+}
+body.reduced-motion .drive-frame,
+body.reduced-motion .drive-dot {
+  animation: none;
+}
+body.reduced-motion .buddy-label,
+body.reduced-motion .buddy.p-idle .buddy-label,
+body.reduced-motion .buddy.p-near .buddy-label,
+body.reduced-motion .buddy.moving .buddy-label {
+  transform: none;
+}

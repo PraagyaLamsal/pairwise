@@ -105,6 +105,11 @@ npm run dist:mac                     # unsigned DMGs (arm64 and x64) for sharing
 code; no Apple account needed), and installs it in `/Applications` (or `~/Applications` if that
 isn't writable). Signing it to share with others: BLOCKERS.md B-4.
 
+It's light on your battery: when nothing is happening on screen the overlays draw no frames at
+all and moving your mouse costs next to nothing. It follows macOS **Reduce motion**
+(Accessibility → Display): Ada's cursor moves straight and quickly instead of swooping, rings
+don't pulse, celebrations skip the confetti, and cards fade in instead of sliding.
+
 ### Tests
 
 ```sh
@@ -114,7 +119,8 @@ npm test             # unit + integration (vitest): geometry, Live protocol, gro
 npm run test:e2e     # the real app end to end (Playwright for Electron) against a local Gemini
                      # Live mock: shell, voice, pointing accuracy (1× and 2×), draw-and-ask,
                      # steps, calibration, course brain, takeover, App Veil, whiteboard, notes,
-                     # the quiet screen, and cursor gestures (1× and 2×)
+                     # the quiet screen, cursor gestures and code traces (1× and 2×), and
+                     # Reduce motion
 npm run eval:grounding   # with GEMINI_API_KEY set: the pointing-accuracy test using real Gemini
 ```
 

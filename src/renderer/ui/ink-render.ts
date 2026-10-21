@@ -65,6 +65,8 @@ export class InkRenderer {
   private geom = new Map<string, Point[][]>();
   /** Font stack for typed text (celebrations use it too). */
   fontFamily = NOTE_FONT;
+  /** macOS "Reduce motion": rings and badges appear and fade instead of pulsing and popping. */
+  reducedMotion = false;
 
   forget(id: string): void {
     this.cache.delete(id);
@@ -76,9 +78,43 @@ export class InkRenderer {
     this.geom.clear();
   }
 
-  /** Whether any item is still animating (drawing in, popping, pulsing or fading) at `now`. */
+  /** Whether any item is animating (drawing in, popping, pulsing or fading) at `now`. */
   animating(items: InkItem[], now: number): boolean {
-    return items.some((i) => now < i.revealAt + i.drawMs + 450 || (i.fadeAt != null && now < i.fadeAt + (i.fadeMs ?? FADE_MS)) || (i.kind === 'ring' && (i.fadeAt == null || now < i.revealAt + RING_PULSES_MS)));
+    return this.nextChange(items, now) <= now;
+  }
+
+  /**
+   * When the scene next changes: `now` if something is moving at this moment, else the time the
+   * next thing starts (a scheduled mark, a fade, a staying ring's next pulse), else Infinity.
+   * Lets an idle overlay stop drawing frames altogether.
+   */
+  nextChange(items: InkItem[], now: number): number {
+    let next = Infinity;
+    for (const i of items) {
+      if (now < i.revealAt) {
+        next = Math.min(next, i.revealAt);
+        continue;
+      }
+      if (now < i.revealAt + i.drawMs + 450) return now;
+      if (i.fadeAt != null) {
+        if (now < i.fadeAt) next = Math.min(next, i.fadeAt);
+        else if (now < i.fadeAt + (i.fadeMs ?? FADE_MS)) return now;
+        else continue;
+      }
+      if (i.kind === 'ring') {
+        const t = now - i.revealAt;
+        if (this.reducedMotion) {
+          if (t < RING_STILL_MS) return now;
+          continue;
+        }
+        if (i.fadeAt == null) {
+          const cycle = RING_REPEAT_S * 1000;
+          if (t % cycle < RING_PULSES_MS) return now;
+          next = Math.min(next, now - (t % cycle) + cycle);
+        } else if (t < RING_PULSES_MS) return now;
+      }
+    }
+    return next;
   }
 
   private shapes(item: InkItem): Point[][] {
@@ -250,13 +286,14 @@ export class InkRenderer {
     if (!item.at) return;
     const r = (item.fontSize ?? 26) / 2 + 1;
     const raw = Math.min(1, ms / Math.max(1, item.drawMs));
-    const pop = raw >= 1 ? 1 : Math.max(0, easeOutBack(Math.min(1, raw * 1.6)));
+    const pop = this.reducedMotion || raw >= 1 ? 1 : Math.max(0, easeOutBack(Math.min(1, raw * 1.6)));
+    if (this.reducedMotion) ctx.globalAlpha *= Math.min(1, ms / 160);
     const { x, y } = item.at;
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(pop, pop);
     const t = (ms - item.drawMs * 0.4) / 900;
-    if (t > 0 && t < 1) {
+    if (t > 0 && t < 1 && !this.reducedMotion) {
       ctx.beginPath();
       ctx.arc(0, 0, r + 3 + easeOut(t) * 14, 0, Math.PI * 2);
       ctx.strokeStyle = hexToRgba(item.color, 0.5 * (1 - t));
@@ -292,6 +329,18 @@ export class InkRenderer {
     const c = item.at ?? (item.rect ? { x: item.rect.x + item.rect.width / 2, y: item.rect.y + item.rect.height / 2 } : null);
     if (!c) return;
     const reach = item.rect ? Math.min(48, Math.max(26, Math.max(item.rect.width, item.rect.height) / 2 + 12)) : 30;
+    if (this.reducedMotion) {
+      // One still ring at its full size that fades in (and out, unless it's waiting for a click).
+      const ms = now - item.revealAt;
+      const a = item.fadeAt == null ? Math.min(1, ms / 160) : ms < 160 ? ms / 160 : Math.max(0, 1 - (ms - RING_STILL_MS + 400) / 400);
+      if (a <= 0) return;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, reach * 0.8, 0, Math.PI * 2);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = hexToRgba(item.color, 0.85 * a);
+      ctx.stroke();
+      return;
+    }
     let t = (now - item.revealAt) / 1000;
     if (item.fadeAt == null) t %= RING_REPEAT_S;
     for (let k = 0; k < 2; k++) {
@@ -323,6 +372,8 @@ const RING_PULSE_S = 0.9;
 const RING_GAP_S = 0.42;
 const RING_REPEAT_S = 3.4;
 const RING_PULSES_MS = (RING_GAP_S + RING_PULSE_S) * 1000 + 60;
+/** Reduce motion: how long a still ring shows before it fades. */
+const RING_STILL_MS = 1400;
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();

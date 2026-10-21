@@ -16,7 +16,10 @@ export const NEAR_PX = 60;
 const NEAR_LEAVE_PX = 84;
 /** How long the name label shows when the session starts (Tuple shows names on join). */
 const JOIN_LABEL_MS = 2600;
+/** Driving: the cursor rides the real pointer, so frames go out at 60 Hz. */
 const TICK_MS = 1000 / 60;
+/** Otherwise overlays animate moves themselves; 30 Hz is plenty for presence and the pointer. */
+const IDLE_TICK_MS = 1000 / 30;
 const SEND_EVERY_MS = 1000 / 60;
 
 export type CursorMode = 'hidden' | 'parked' | 'timeline' | 'driving';
@@ -25,11 +28,12 @@ export type CursorMode = 'hidden' | 'parked' | 'timeline' | 'driving';
  * A cursor flight: a gently curved path (a hand moving a mouse rarely goes dead straight), eased
  * with a minimum-jerk profile (see flightPoint). Long moves take longer, within limits.
  */
-export function planFlight(from: Point, to: Point, startAt: number, label?: string, maxMs = 1200): CursorFlight {
+export function planFlight(from: Point, to: Point, startAt: number, label?: string, maxMs = 1200, reducedMotion = false): CursorFlight {
   const d = distance(from, to);
-  const duration = Math.round(Math.min(Math.max(d / 900, d < 60 ? 0.24 : 0.44), maxMs / 1000) * 1000);
+  // Reduce motion: a short, straight move rather than a swoop (it still shows where she went).
+  const duration = reducedMotion ? Math.round(Math.min(d / 2400 + 0.12, 0.26, maxMs / 1000) * 1000) : Math.round(Math.min(Math.max(d / 900, d < 60 ? 0.24 : 0.44), maxMs / 1000) * 1000);
   const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-  const arc = Math.min(d * 0.1, 46);
+  const arc = reducedMotion ? 0 : Math.min(d * 0.1, 46);
   // Curve "upward" relative to the direction of travel (perpendicular, biased to screen-up).
   const nx = -(to.y - from.y) / (d || 1);
   const ny = (to.x - from.x) / (d || 1);
@@ -93,13 +97,15 @@ export class CursorEngine extends EventEmitter {
   constructor(
     private readonly displays: DisplayService,
     private readonly hooks: InputHooks,
-    private readonly opts: { name: () => string },
+    /** `pointerMatters`: whether the student's pointer is near anything the overlays fade for it (cards, chips). */
+    private readonly opts: { name: () => string; pointerMatters?: (p: Point) => boolean; reducedMotion?: () => boolean },
   ) {
     super();
   }
 
   get position(): Point {
-    return { ...this.pos };
+    // Exact between ticks while a move is under way.
+    return this.mode === 'timeline' ? this.positionAt(Date.now()) : { ...this.pos };
   }
 
   get currentMode(): CursorMode {
@@ -141,12 +147,19 @@ export class CursorEngine extends EventEmitter {
     this.setLabel(this.opts.name(), 'name');
     this.activeUntil = Date.now() + JOIN_LABEL_MS;
     this.presenceNow = 'active';
-    if (!this.timer) this.timer = setInterval(() => this.tick(), TICK_MS);
+    if (!this.timer) this.loop();
     this.send(true);
   }
 
+  private loop(): void {
+    this.timer = setTimeout(() => {
+      this.tick();
+      if (this.timer) this.loop();
+    }, this.mode === 'driving' ? TICK_MS : IDLE_TICK_MS);
+  }
+
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.segments = [];
     this.mode = 'hidden';
@@ -199,7 +212,7 @@ export class CursorEngine extends EventEmitter {
       if (step.kind === 'fly') {
         const display = displayForPoint(this.displays.list(), step.to);
         const to = display ? clampPointInside(step.to, display.bounds) : step.to;
-        const flight = planFlight(from, to, t, step.label, step.maxMs);
+        const flight = planFlight(from, to, t, step.label, step.maxMs, this.opts.reducedMotion?.() ?? false);
         const seg: Segment = { kind: 'flight', startAt: t, endAt: t + flight.duration, flight };
         this.segments.push(seg);
         this.emit('flight', flight);
@@ -373,8 +386,8 @@ export class CursorEngine extends EventEmitter {
     }
 
     if (now - this.lastSent >= SEND_EVERY_MS) this.send(false);
-    // Keep-alive so overlays that (re)load mid-session always have a current frame.
-    if (now - this.lastSent >= 1000) this.send(true);
+    // Keep-alive, in case an overlay missed a frame (one that (re)loads is sent the current one).
+    if (now - this.lastSent >= 5000) this.send(true);
   }
 
   /** Current frame, for overlays that just became ready. */
@@ -402,8 +415,10 @@ export class CursorEngine extends EventEmitter {
 
   private send(force: boolean): void {
     const f = this.frame();
-    // The student's pointer only matters to the overlays at a couple of pixels' precision.
-    const key = `${f.pos.x},${f.pos.y},${f.activity},${f.labelSeq},${f.visible},${this.mode},${f.level},${f.presence},${f.mouse.x >> 1},${f.mouse.y >> 1}`;
+    // The student's pointer only matters to the overlays near their cards and chips (which fade
+    // out of its way), and then at a couple of pixels' precision. Elsewhere moving it sends nothing.
+    const near = this.opts.pointerMatters ? this.opts.pointerMatters(f.mouse) : true;
+    const key = `${f.pos.x},${f.pos.y},${f.activity},${f.labelSeq},${f.visible},${this.mode},${f.level},${f.presence},${near ? `${f.mouse.x >> 1},${f.mouse.y >> 1}` : 'far'}`;
     if (!force && key === this.lastFrameKey) return;
     this.lastFrameKey = key;
     this.lastSent = Date.now();
