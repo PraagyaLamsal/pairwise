@@ -60,153 +60,73 @@ body.drawing::after {
   opacity: 0;
 }
 
-/* ---------- the buddy cursor ---------- */
+/* ---------- the tutor's cursor ---------- */
+/* A person's cursor on a pairing call: flat arrow, white edge, a name label only while busy. */
 .buddy {
   position: fixed;
   left: 0;
   top: 0;
   z-index: 50;
   pointer-events: none;
-  will-change: transform;
-  transition: opacity 180ms ease;
+  will-change: transform, opacity;
+  /* coming back is quick … */
+  transition: opacity 140ms ease-out;
 }
 .buddy.hidden {
   opacity: 0;
 }
-.buddy-shape {
+/* … fading away is slow, so it never "blinks" */
+.buddy.p-idle {
+  opacity: 0.35;
+  transition: opacity 520ms ease-in-out;
+}
+.buddy.p-near {
+  opacity: 0.12;
+  transition: opacity 260ms ease-out;
+}
+.buddy.hidden.p-idle,
+.buddy.hidden.p-near {
+  opacity: 0;
+}
+.buddy-arrow {
   position: absolute;
   left: 0;
   top: 0;
-  width: 28px;
-  height: 28px;
-  transform-origin: 3px 3px;
-  --glow-boost: 0;
-  filter: drop-shadow(0 0 calc(4px + var(--glow-boost) * 10px) var(--buddy-glow)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
-  will-change: transform, filter;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.38));
 }
-.buddy.act-speaking .buddy-shape {
-  animation: buddy-breathe 1.6s ease-in-out infinite;
-}
-@keyframes buddy-breathe {
-  50% {
-    filter: drop-shadow(0 0 11px var(--buddy-glow)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
-  }
-}
-.buddy.tracing .buddy-label {
-  opacity: 0;
-  transform: scale(0.8);
-}
-.buddy-tri {
-  position: absolute;
-  inset: 0;
-  transition: opacity 160ms, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.buddy-wave,
-.buddy-spin {
-  position: absolute;
-  left: -2px;
-  top: -2px;
-  opacity: 0;
-  transition: opacity 160ms;
-}
-.buddy-wave {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 18px;
-  left: -4px;
-  top: -6px;
-}
-.buddy-wave span {
-  width: 3px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--buddy);
-  transform: scaleY(0.3);
-}
-.buddy-spin {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--buddy) 300deg, var(--buddy-hi) 360deg);
-  -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px);
-  mask: radial-gradient(circle, transparent 4.5px, #000 5px);
-  animation: buddy-spin 0.75s linear infinite;
-}
-@keyframes buddy-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.buddy.act-listening .buddy-tri,
-.buddy.act-thinking .buddy-tri {
-  opacity: 0;
-  transform: scale(0.4);
-}
-.buddy.act-listening .buddy-wave {
-  opacity: 1;
-}
-.buddy.act-thinking .buddy-spin {
-  opacity: 1;
-}
-.buddy.flying .buddy-wave,
-.buddy.flying .buddy-spin {
-  opacity: 0;
-}
-.buddy.flying .buddy-tri {
-  opacity: 1;
-  transform: none;
-}
-
 .buddy-label {
   position: absolute;
-  left: 19px;
-  top: 22px;
+  left: 17px;
+  top: 21px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, var(--buddy-hi) -60%, var(--buddy) 70%);
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--buddy);
   color: #fff;
-  font-size: 12px;
-  font-weight: 640;
+  font-size: 11.5px;
+  font-weight: 650;
   letter-spacing: -0.005em;
   white-space: nowrap;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
-  box-shadow: 0 0 14px var(--buddy-glow-soft), 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 4px 10px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transform-origin: 0 0;
-  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms;
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
-.buddy-label.pop {
-  animation: label-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes label-pop {
-  from {
-    transform: scale(0.5);
-    box-shadow: 0 0 26px var(--buddy-glow);
-  }
-}
-.buddy.flying .buddy-label {
-  opacity: 0;
-  transform: scale(0.7);
-}
-.buddy-label-wave {
+.buddy-label.empty {
   display: none;
-  align-items: center;
-  gap: 2px;
-  height: 11px;
 }
-.buddy-label.speaking .buddy-label-wave {
-  display: inline-flex;
+/* The label shows only while she is doing something, and never while the cursor is moving. */
+.buddy.p-idle .buddy-label,
+.buddy.p-near .buddy-label,
+.buddy.moving .buddy-label {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 220ms ease-in, transform 220ms ease-in;
 }
-.buddy-label-wave span {
-  width: 2px;
-  height: 11px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.92);
-  transform: scaleY(0.3);
+.buddy.act-driving .buddy-label {
+  color: #2a1a00;
 }
 
 /* ---------- UI layer ---------- */
@@ -219,44 +139,52 @@ body.drawing::after {
 .interactive {
   pointer-events: auto;
 }
+/* Anything the student's pointer comes near steps back, so nothing blocks their work. */
+[data-shy] {
+  transition: opacity 160ms ease-out;
+}
+[data-shy].shy {
+  opacity: 0.15 !important;
+  transition: opacity 220ms ease-out;
+}
 .drive-frame {
   position: fixed;
   inset: 0;
   border-radius: 10px;
-  box-shadow: inset 0 0 0 3px rgba(255, 178, 36, 0.85), inset 0 0 40px rgba(255, 178, 36, 0.35);
-  animation: drive-pulse 1.8s ease-in-out infinite;
+  box-shadow: inset 0 0 0 2px rgba(255, 178, 36, 0.9), inset 0 0 28px rgba(255, 178, 36, 0.28);
+  animation: drive-pulse 2.2s ease-in-out infinite;
 }
 @keyframes drive-pulse {
   50% {
-    box-shadow: inset 0 0 0 3px rgba(255, 178, 36, 0.6), inset 0 0 70px rgba(255, 178, 36, 0.22);
+    box-shadow: inset 0 0 0 2px rgba(255, 178, 36, 0.65), inset 0 0 46px rgba(255, 178, 36, 0.18);
   }
 }
 .drive-banner {
   position: fixed;
-  /* Bottom centre: the HUD lives at the top by default. */
-  bottom: 22px;
+  /* Bottom centre: the session bar lives at the top by default. */
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 18px;
+  gap: 9px;
+  padding: 7px 15px;
   border-radius: 999px;
   background: linear-gradient(180deg, #ffbe3d, #f5a40c);
   color: #2a1a00;
   font-weight: 750;
-  font-size: 14px;
-  box-shadow: 0 10px 36px rgba(245, 164, 12, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  box-shadow: 0 8px 26px rgba(245, 164, 12, 0.35), 0 2px 6px rgba(0, 0, 0, 0.3);
   white-space: nowrap;
 }
 .drive-hint {
   font-weight: 560;
   opacity: 0.8;
-  font-size: 13px;
+  font-size: 12px;
 }
 .drive-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #2a1a00;
   animation: rec 1.2s ease-in-out infinite;
@@ -266,67 +194,110 @@ body.drawing::after {
     opacity: 0.3;
   }
 }
-.vision-pill {
+/* Only when the session bar is hidden: the always-there "Ada can see this screen" sign. */
+.vision-dot {
   position: fixed;
-  right: 14px;
-  bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
-  background: rgba(16, 19, 24, 0.78);
-  border: 1px solid rgba(47, 123, 255, 0.4);
+  background: rgba(16, 19, 24, 0.7);
   color: #a9c8ff;
-  font-size: 11.5px;
-  font-weight: 600;
-  backdrop-filter: blur(6px);
 }
-.vision-pill.paused {
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #9aa4b2;
+.vision-dot.paused {
+  color: #ffc85c;
 }
 .veil-outline {
   position: fixed;
-  border: 2px dashed rgba(255, 138, 31, 0.9);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  border: 1.5px dashed rgba(255, 138, 31, 0.7);
+  border-radius: 9px;
 }
 .veil-outline span {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(255, 138, 31, 0.95);
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 138, 31, 0.92);
   color: #241200;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
+  opacity: 0;
+  transition: opacity 400ms ease;
 }
+.veil-outline.fresh span {
+  opacity: 1;
+}
+
+/* ---------- step card: one line, opens for a moment when the step changes ---------- */
 .step-card {
   position: fixed;
-  top: 52px;
-  right: 18px;
-  width: 300px;
-  padding: 14px 16px 12px;
-  border-radius: 16px;
-  background: rgba(16, 19, 24, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  top: 54px;
+  right: 16px;
+  max-width: 300px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: rgba(16, 19, 24, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   color: #e9edf3;
-  animation: card-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: card-in 220ms var(--ease-out, ease-out);
 }
 @keyframes card-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.97);
+    transform: translateY(-6px);
   }
+}
+.step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.step-num {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--tutor);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.step-num.done {
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
+  background: #34d399;
+}
+.step-now {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.step-all {
+  display: none;
+}
+.step-card.open .step-line {
+  display: none;
+}
+.step-card.open {
+  padding: 11px 14px 10px;
+  width: 280px;
+}
+.step-card.open .step-all {
+  display: block;
 }
 .step-title {
   font-weight: 700;
-  font-size: 13.5px;
-  margin-bottom: 8px;
-  padding-right: 18px;
+  font-size: 13px;
+  margin-bottom: 7px;
 }
 .step-card ol {
   list-style: none;
@@ -334,13 +305,13 @@ body.drawing::after {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .step-card li {
   display: flex;
-  gap: 10px;
+  gap: 9px;
   align-items: flex-start;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.4;
   color: #8f99a8;
 }
@@ -348,11 +319,11 @@ body.drawing::after {
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.18);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
 }
 .step-card li.active {
@@ -362,7 +333,6 @@ body.drawing::after {
   border-color: var(--tutor);
   background: var(--tutor);
   color: #fff;
-  box-shadow: 0 0 10px rgba(47, 123, 255, 0.7);
 }
 .step-card li.done {
   color: #6b7586;
@@ -373,39 +343,24 @@ body.drawing::after {
   border-color: rgba(52, 211, 153, 0.6);
   color: #34d399;
 }
-.card-x {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #6b7586;
-  font-size: 16px;
-  cursor: pointer;
-}
-.card-x:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
+
+/* ---------- consent: the one card you click (it stays obvious) ---------- */
 .consent {
   position: fixed;
   top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  width: 440px;
+  width: 420px;
   display: flex;
   gap: 14px;
-  padding: 16px 18px 18px;
-  border-radius: 18px;
+  padding: 15px 17px 17px;
+  border-radius: 16px;
   background: rgba(18, 21, 28, 0.97);
   border: 1px solid rgba(255, 178, 36, 0.5);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(255, 178, 36, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 5px rgba(255, 178, 36, 0.08);
   color: #e9edf3;
   overflow: hidden;
-  animation: consent-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: consent-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes consent-in {
   from {
@@ -425,17 +380,17 @@ body.drawing::after {
   }
 }
 .drive-banner ~ .toast {
-  bottom: 80px;
+  bottom: 70px;
 }
 .consent.risky {
   border-color: rgba(229, 72, 77, 0.6);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(229, 72, 77, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 5px rgba(229, 72, 77, 0.1);
 }
 .consent-icon {
   flex: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   background: rgba(255, 178, 36, 0.16);
@@ -449,7 +404,7 @@ body.drawing::after {
 }
 .consent-title {
   font-weight: 720;
-  font-size: 15px;
+  font-size: 14.5px;
 }
 .consent-detail {
   color: #a3adbb;
@@ -470,10 +425,10 @@ body.drawing::after {
 .consent-buttons {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 13px;
 }
 .consent-buttons button {
-  height: 32px;
+  height: 31px;
   padding: 0 14px;
   border-radius: 9px;
   font-weight: 650;
@@ -519,85 +474,75 @@ body.drawing::after {
     transform: scaleX(0);
   }
 }
+
+/* ---------- chips that go away on their own ---------- */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 56px;
+  bottom: 40px;
   transform: translateX(-50%);
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(16, 19, 24, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(16, 19, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #e9edf3;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 560;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  animation: toast-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+  animation: toast-in 200ms var(--ease-out, ease-out);
 }
 .toast.warn {
-  border-color: rgba(255, 178, 36, 0.5);
+  border-color: rgba(255, 178, 36, 0.45);
   color: #ffd27a;
 }
 .toast.success {
-  border-color: rgba(52, 211, 153, 0.5);
+  border-color: rgba(52, 211, 153, 0.45);
   color: #9ff0cf;
 }
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translate(-50%, 6px);
   }
 }
 .citation {
   position: fixed;
-  left: 18px;
-  bottom: 18px;
-  max-width: 380px;
-  padding: 11px 14px;
-  border-radius: 14px;
-  background: rgba(16, 19, 24, 0.94);
-  border: 1px solid rgba(47, 123, 255, 0.35);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
-  color: #e9edf3;
-  animation: card-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.cite-kicker {
+  left: 16px;
+  bottom: 16px;
+  max-width: 360px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(141, 184, 255, 0.75);
-  margin-bottom: 5px;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(16, 19, 24, 0.86);
+  border: 1px solid rgba(47, 123, 255, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  color: #e9edf3;
+  animation: card-in 220ms var(--ease-out, ease-out);
+}
+.cite-icon {
+  display: grid;
+  color: #8db8ff;
 }
 .cite-src {
-  font-size: 13px;
-  font-weight: 700;
-  color: #f1f5fb;
-  margin-bottom: 4px;
-}
-.cite-snippet {
   font-size: 12.5px;
-  line-height: 1.45;
-  color: #c3cad5;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
+  font-weight: 650;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .scope-badge {
   position: fixed;
   left: 50%;
-  bottom: 96px;
+  bottom: 76px;
   transform: translateX(-50%);
-  padding: 7px 13px;
+  padding: 5px 11px;
   border-radius: 999px;
-  background: rgba(36, 26, 6, 0.92);
-  border: 1px solid rgba(255, 178, 36, 0.5);
+  background: rgba(36, 26, 6, 0.9);
+  border: 1px solid rgba(255, 178, 36, 0.45);
   color: #ffd27a;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -687,4 +632,90 @@ body.drawing::after {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ---------- "Show me": Ada waits for the student to click the answer ---------- */
+body.answering .draw-surface {
+  pointer-events: auto;
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='3.2'/><circle cx='16' cy='16' r='9' fill='none' stroke='%23FF8A1F' stroke-width='1.8'/><circle cx='16' cy='16' r='2.2' fill='%23FF8A1F' stroke='white' stroke-width='1'/></svg>") 16 16, crosshair;
+}
+body.answering::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 138, 31, 0.45);
+  animation: draw-in 160ms ease-out;
+}
+.answer-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(720px, calc(100vw - 48px));
+  padding: 8px 8px 8px 12px;
+  border-radius: 999px;
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f2f4f8;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transition: opacity 140ms;
+  pointer-events: none;
+}
+.answer-hint.hidden {
+  opacity: 0;
+}
+.ah-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tutor, #2f7bff);
+}
+.ah-q {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ah-esc {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(242, 244, 248, 0.6);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+/* ---------- macOS "Reduce motion" ----------
+ * Set from the system setting (and by main for tests): cards and toasts fade in instead of
+ * sliding or popping, the driving frame stops breathing, labels don't scale. Fades stay. */
+body.reduced-motion .step-card,
+body.reduced-motion .consent,
+body.reduced-motion .toast,
+body.reduced-motion .citation,
+body.reduced-motion .cal-found,
+body.reduced-motion .cal-tag {
+  animation-name: rm-fade !important;
+  animation-timing-function: ease-out !important;
+}
+@keyframes rm-fade {
+  from {
+    opacity: 0;
+  }
+}
+body.reduced-motion .drive-frame,
+body.reduced-motion .drive-dot {
+  animation: none;
+}
+body.reduced-motion .buddy-label,
+body.reduced-motion .buddy.p-idle .buddy-label,
+body.reduced-motion .buddy.p-near .buddy-label,
+body.reduced-motion .buddy.moving .buddy-label {
+  transform: none;
 }

@@ -33,16 +33,40 @@ export interface InkItem {
   from?: Point;
   to?: Point;
   points?: Point[];
-  pressures?: number[];
   at?: Point;
   text?: string;
   num?: number;
   fontSize?: number;
+  /** Text: typed in the system font (default, like Tuple), handwritten, or monospaced (values). */
+  font?: 'system' | 'hand' | 'mono';
+  /**
+   * Text: a value chip, the way a debugger shows values inline: white text typed onto a pill in
+   * the item's colour, at the end of a line of code ("n = 3"). A newer chip on the same line
+   * replaces it.
+   */
+  chip?: boolean;
+  /** Fade-out length in ms when it's replaced rather than faded with its turn (default FADE_MS). */
+  fadeMs?: number;
   /** Text: 'center' = `at` is the centre of the first line (diagram labels). */
   align?: 'center';
   width?: number;
   /** Arrow bend: -1..1 (0 = straight). */
   bend?: number;
+  /**
+   * What it marks, where that isn't its own geometry: the line a value chip belongs to, the
+   * target an arrow or a note is about. Sticky ink follows this when the screen moves.
+   */
+  anchor?: Rect;
+  /**
+   * It just moved by (dx, dy) at `at` (what it marks scrolled): drawn gliding there from where
+   * it was over `ms`. Geometry is already at the new place.
+   */
+  slide?: { dx: number; dy: number; at: number; ms: number };
+  /**
+   * Parked: hidden since `at` because the line it marks scrolled out of view (it keeps moving
+   * with its group); `on: false` from `at` = back in view, fading in again.
+   */
+  park?: { on: boolean; at: number };
   /** Epoch ms when drawing starts. */
   revealAt: number;
   /** How long the stroke takes to draw itself. */
@@ -58,6 +82,13 @@ export interface InkItem {
 }
 
 export type CursorActivity = 'idle' | 'listening' | 'thinking' | 'speaking' | 'waiting' | 'driving';
+
+/**
+ * How present the tutor's cursor is: `active` while it moves or shows a label, `idle` (dimmed,
+ * no label) when it is just resting where it was left, `near` (almost transparent) when the
+ * student's pointer comes close, so it never sits on top of what they are doing.
+ */
+export type CursorPresence = 'active' | 'idle' | 'near';
 
 export interface CursorFrame {
   /** Global DIP position of the cursor tip. */
@@ -75,6 +106,9 @@ export interface CursorFrame {
   labelSeq: number;
   /** 0..1 audio level for the waveform states. */
   level: number;
+  presence: CursorPresence;
+  /** The student's own pointer (global DIP): overlays fade what it comes close to. */
+  mouse: Point;
   t: number;
 }
 
@@ -89,11 +123,15 @@ export interface CursorFlight {
 
 /**
  * The tutor's cursor drawing an ink item: from `startAt` for `duration` ms the cursor tip follows
- * the item's own stroke path, with the same easing the renderer uses to reveal the ink — so the
- * cursor really is the pen.
+ * the item's own stroke path, with the same timing the renderer uses to reveal the ink — so the
+ * cursor really is the pen. Without an item, a pointer-only gesture: the tip glides along `path`
+ * (following a line of text, sweeping down a list) and nothing is drawn.
  */
 export interface CursorTrace {
-  itemId: string;
+  itemId?: string;
+  path?: Point[];
+  /** Gesture pacing: glide (ease in/out), read (steady, like following a line), sweep (line by line). */
+  style?: 'glide' | 'read' | 'sweep';
   startAt: number;
   duration: number;
   /** Where the trace ends (global DIP), so overlays can park there without the item. */
@@ -145,6 +183,8 @@ export interface VeilOutline {
 export interface OverlayUiState {
   driving: boolean;
   drivingLabel?: string;
+  /** The session bar is hidden (⌃⌥H): a tiny "can see" eye stays on screen instead. */
+  hudHidden?: boolean;
   visionDisplayId?: string;
   visionLabel?: string;
   visionPaused: boolean;

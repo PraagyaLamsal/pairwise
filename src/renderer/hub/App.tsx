@@ -73,7 +73,7 @@ export function App() {
               </div>
             )
           )}
-          {info?.demo && <div className="demo-chip">Demo tutor · add a Gemini key in Settings</div>}
+          {info?.demo && <div className="demo-chip">{info.keyUnreadable ? 'Your saved key needs pasting again · Settings → Gemini' : 'Demo tutor · add a Gemini key in Settings'}</div>}
         </div>
       </aside>
       <main className="content">

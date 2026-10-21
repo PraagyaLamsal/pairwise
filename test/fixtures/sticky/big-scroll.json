@@ -1,0 +1,68 @@
+{
+ "note": "Looks the engine took while the README sticky scene scrolled 120 DIP down and back (scripts/debug/sticky-dump.mjs), grey at half a pixel per DIP. Each case: judge(ref, cur) with the anchors where they were; the real move is `dy` px (`settle`: the scroll's last half pixel, which may also read as still there).",
+ "width": 720,
+ "height": 450,
+ "cases": [
+  {
+   "name": "down",
+   "ref": "look1",
+   "cur": "look2",
+   "boxes": [
+    {
+     "x": 44.08,
+     "y": 69.85000000000001,
+     "w": 136.48000000000002,
+     "h": 16.14999999999999
+    },
+    {
+     "x": 44.08,
+     "y": 100,
+     "w": 76,
+     "h": 16.150000000000006
+    }
+   ],
+   "dy": -13.5
+  },
+  {
+   "name": "back",
+   "ref": "look12",
+   "cur": "look13",
+   "boxes": [
+    {
+     "x": 44.08,
+     "y": 182.85000000000002,
+     "w": 136.48000000000002,
+     "h": 16.14999999999999
+    },
+    {
+     "x": 44.08,
+     "y": 213,
+     "w": 76,
+     "h": 16.150000000000006
+    }
+   ],
+   "dy": 8.5
+  },
+  {
+   "name": "settling",
+   "ref": "settle-ref",
+   "cur": "settle-cur",
+   "boxes": [
+    {
+     "x": 44.08,
+     "y": 56.85000000000001,
+     "w": 136.48000000000002,
+     "h": 16.14999999999999
+    },
+    {
+     "x": 44.08,
+     "y": 87,
+     "w": 76,
+     "h": 16.150000000000006
+    }
+   ],
+   "dy": -0.5,
+   "settle": true
+  }
+ ]
+}

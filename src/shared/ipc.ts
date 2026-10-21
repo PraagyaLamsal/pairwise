@@ -28,6 +28,8 @@ export interface AppInfo {
   version: string;
   platform: string;
   demo: boolean;
+  /** A key is saved but this build can't decrypt it (see ApiKeyStatus.unreadable). */
+  keyUnreadable?: boolean;
   fakePlatform: boolean;
   tutorName: string;
 }
@@ -44,6 +46,11 @@ export interface ApiKeyStatus {
   hasKey: boolean;
   source: 'keychain' | 'env' | 'none';
   preview?: string;
+  /**
+   * A key is saved but this copy of Pairwise can't decrypt it: it was saved by another build
+   * (`npm run dev` uses Electron's keychain entry, the app its own). Paste it again.
+   */
+  unreadable?: boolean;
 }
 
 export interface RunningApp {
@@ -106,6 +113,8 @@ export interface EventMap {
   'courses:indexProgress': { courseId: string; status: IndexStatus };
   'usage:changed': UsageSummary;
   'hub:navigate': { tab: string };
+  /** A session's notes (and the resume summary) are written: the course page refreshes. */
+  'session:notesWritten': { courseId: string; file: string | null };
   'overlay:init': OverlayInit;
   'overlay:cursor': CursorFrame;
   'overlay:flight': CursorFlight;
@@ -114,6 +123,8 @@ export interface EventMap {
   'overlay:ink': InkOp;
   'overlay:ui': OverlayUiState;
   'overlay:drawMode': DrawModeState;
+  /** "Show me" (ask_to_point): the overlays take the student's next click as their answer. */
+  'overlay:answerMode': { active: boolean; prompt: string; color: string };
   'overlay:celebrate': Celebration;
   'overlay:calibration': CalibrationState | null;
   'whiteboard:ink': InkOp;
@@ -133,6 +144,9 @@ export interface SendMap {
   'overlay:stroke': StudentStroke;
   'overlay:drawCommit': { via: 'toggle' | 'hold' };
   'overlay:drawCancel': Record<string, never>;
+  /** The student's answer to ask_to_point: where they clicked (global DIP). */
+  'overlay:answer': { displayId: string; point: { x: number; y: number } };
+  'overlay:answerCancel': Record<string, never>;
   'overlay:consent': { id: string; decision: 'allow' | 'deny' };
   'overlay:dismissCard': { kind: 'citation' | 'step' | 'toast' | 'scope' };
   'overlay:hover': { displayId: string; interactive: boolean };
@@ -148,7 +162,7 @@ export interface SendMap {
   'engine:vad': { speaking: boolean; at: number };
   'engine:playback': PlaybackStatus;
   'engine:frame': EncodedFrame;
-  'engine:reply': { requestId: string; ok: boolean; error?: string; frame?: EncodedFrame; frames?: EncodedFrame[] };
+  'engine:reply': { requestId: string; ok: boolean; error?: string; frame?: EncodedFrame; frames?: EncodedFrame[]; track?: TrackResult[] };
   'engine:log': { level: 'info' | 'warn' | 'error'; message: string };
   'hub:log': { level: 'info' | 'warn' | 'error'; message: string };
 }
@@ -213,6 +227,35 @@ export interface CaptureSourceSpec {
   sourceSize?: { width: number; height: number };
 }
 
+/** Sticky ink: one group of marks for the engine to follow on screen (global DIP). */
+export interface TrackGroup {
+  key: string;
+  /** What the marks are about: the content under and beside them. */
+  anchors: Rect[];
+  /** The mark each anchor belongs to. */
+  ids: string[];
+  /** Marks hidden because their line went out of view, with where their line would be now. */
+  parked?: { id: string; anchor: Rect }[];
+  /** All of it went: `anchors` are where it was, to look for it again. */
+  away?: boolean;
+}
+
+/**
+ * Where a group's content is now: still there, moved by `dy` (DIP, + = down), gone (hide its
+ * marks), or back after being gone (`dy` from where it was).
+ */
+export interface TrackResult {
+  key: string;
+  state: 'steady' | 'moved' | 'gone' | 'unsure' | 'back';
+  dy: number;
+  /** moved: anchors (indices) whose content didn't come along — it scrolled out of view. */
+  lost?: number[];
+  /** Parked marks whose line is back in view. */
+  back?: string[];
+  /** Parked marks the engine can't recognise again (let them go). */
+  forget?: string[];
+}
+
 export type EngineCommand =
   | { type: 'startAudio'; echoCancellation: boolean; playbackRate: number }
   | { type: 'stopAudio' }
@@ -229,6 +272,8 @@ export type EngineCommand =
   | { type: 'setActiveDisplay'; displayId: string }
   | { type: 'setVeil'; rects: { displayId: string; rects: Rect[] }[] }
   | { type: 'setLiveCapture'; enabled: boolean }
+  /** Sticky ink: compare each group's anchors with how they looked (masks: pixels to skip). */
+  | { type: 'trackInk'; requestId: string; displayId: string; groups: TrackGroup[]; masks: Rect[] }
   | {
       type: 'captureNow';
       requestId: string;
@@ -260,13 +305,13 @@ export const INVOKE_CHANNELS: InvokeChannel[] = [
 
 export const EVENT_CHANNELS: EventChannel[] = [
   'session:snapshot', 'session:caption', 'session:levels', 'settings:changed', 'courses:changed', 'courses:indexProgress',
-  'usage:changed', 'hub:navigate', 'overlay:init', 'overlay:cursor', 'overlay:flight', 'overlay:trace', 'overlay:cursorCancel', 'overlay:ink', 'overlay:ui',
-  'overlay:drawMode', 'overlay:celebrate', 'overlay:calibration', 'whiteboard:ink', 'whiteboard:init', 'overlay:penItems', 'whiteboard:drawMode',
+  'usage:changed', 'hub:navigate', 'session:notesWritten', 'overlay:init', 'overlay:cursor', 'overlay:flight', 'overlay:trace', 'overlay:cursorCancel', 'overlay:ink', 'overlay:ui',
+  'overlay:drawMode', 'overlay:answerMode', 'overlay:celebrate', 'overlay:calibration', 'whiteboard:ink', 'whiteboard:init', 'overlay:penItems', 'whiteboard:drawMode',
   'whiteboard:requestSnapshot', 'engine:command',
 ];
 
 export const SEND_CHANNELS: SendChannel[] = [
-  'overlay:ready', 'overlay:stroke', 'overlay:drawCommit', 'overlay:drawCancel', 'overlay:consent', 'overlay:dismissCard', 'overlay:hover',
+  'overlay:ready', 'overlay:stroke', 'overlay:drawCommit', 'overlay:drawCancel', 'overlay:answer', 'overlay:answerCancel', 'overlay:consent', 'overlay:dismissCard', 'overlay:hover',
   'overlay:uiRects', 'whiteboard:stroke', 'whiteboard:snapshot', 'whiteboard:closed', 'whiteboard:clear', 'engine:ready', 'engine:audio', 'engine:micLevel',
   'engine:vad', 'engine:playback', 'engine:frame', 'engine:reply', 'engine:log', 'hub:log',
 ];

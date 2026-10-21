@@ -5,6 +5,12 @@ products were studied from the outside (their public docs, shipped resources and
 [docs/RESEARCH.md](docs/RESEARCH.md)) to learn what a great pairing call and pointing buddy feel
 like, and every part of Pairwise was written from scratch.
 
+In round 2 the ink was made to behave like Tuple's paint, text and highlight-click tools. Only
+measured behaviour went into Pairwise — a flat round-capped brush of about 6 pt, midpoint
+quadratic smoothing, typed system-font notes, a highlight ring that thins from 6 to 3 pt — found
+by looking at Tuple's public documentation GIFs and at which system drawing calls its binary
+makes (HANDOFF.md, docs/RESEARCH.md). No Tuple code, images, fonts or binaries are in the repo.
+
 ## Clicky (MIT)
 
 A handful of animation constants for the tutor's cursor were adapted from **Clicky**, the
@@ -45,8 +51,7 @@ SOFTWARE.
 | Electron | MIT | App shell |
 | React, React DOM | MIT | Hub, HUD and whiteboard UI |
 | Inter (via @fontsource-variable/inter) | SIL OFL 1.1 | Interface font |
-| Caveat (via @fontsource/caveat) | SIL OFL 1.1 | The tutor's handwriting |
-| perfect-freehand | MIT | Pressure-like stroke outlines for ink |
+| Caveat (via @fontsource/caveat) | SIL OFL 1.1 | The tutor's handwriting (Settings → Ada writes notes → Handwritten) |
 | uiohook-napi | MIT | Global hold-keys and instant takeover reclaim |
 | @jitsi/robotjs | MIT | Mouse/keyboard for takeover (and pointer position on Linux) |
 | get-windows | MIT | Window list for App Veil |

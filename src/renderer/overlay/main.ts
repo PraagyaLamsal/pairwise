@@ -10,6 +10,7 @@ import { CursorView } from './cursor';
 import { OverlayUi } from './ui';
 import { DrawInput } from './draw';
 import { Celebrations } from './celebrate';
+import { AnswerInput } from './answer';
 
 const canvas = document.createElement('canvas');
 canvas.className = 'ink-canvas';
@@ -30,7 +31,25 @@ const ui = new OverlayUi(document.body);
 const celebrations = new Celebrations(['#2F7BFF', '#FF8A1F', '#FFFFFF', '#34D399', '#9B5DE5']);
 let dirty = true;
 let wasAnimating = false;
-const draw = new DrawInput(drawSurface, () => (dirty = true));
+let raf = 0;
+let sleepTimer = 0;
+/**
+ * Draw on the next frame. The loop only runs while something moves; an idle overlay sleeps
+ * (no frames at all) until an event or the next scheduled change wakes it.
+ */
+function wake(): void {
+  if (sleepTimer) {
+    window.clearTimeout(sleepTimer);
+    sleepTimer = 0;
+  }
+  if (!raf) raf = requestAnimationFrame(frame);
+}
+function markDirty(): void {
+  dirty = true;
+  wake();
+}
+const draw = new DrawInput(drawSurface, markDirty);
+const answer = new AnswerInput(drawSurface);
 let fontsReady = false;
 
 function resize(): void {
@@ -39,48 +58,78 @@ function resize(): void {
   canvas.height = Math.round(window.innerHeight * dpr);
   canvas.style.width = `${window.innerWidth}px`;
   canvas.style.height = `${window.innerHeight}px`;
-  dirty = true;
+  markDirty();
 }
 window.addEventListener('resize', resize);
 resize();
 
+/** macOS "Reduce motion" (or forced by main for tests): fades instead of swoops, pops and pulses. */
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+function applyMotion(): void {
+  const reduced = Boolean(init?.reducedMotion) || motionQuery.matches;
+  document.body.classList.toggle('reduced-motion', reduced);
+  renderer.reducedMotion = reduced;
+  celebrations.reducedMotion = reduced;
+  cursor.reducedMotion = reduced;
+  markDirty();
+}
+motionQuery.addEventListener('change', applyMotion);
+
 ipc.on('overlay:init', (i) => {
   init = i;
+  applyMotion();
   document.body.dataset.platform = i.platform;
   cursor.setBounds(i.display.bounds);
   cursor.setColor(i.tutorColor);
   ui.configure(i.display.id, i.display.bounds, i.tutorName);
   draw.configure(i.display.id, i.display.bounds);
+  answer.configure(i.display.id, i.display.bounds);
   celebrations.setColors([i.tutorColor, i.studentColor, '#FFFFFF', '#34D399', '#9B5DE5']);
   document.documentElement.style.setProperty('--tutor', i.tutorColor);
   document.documentElement.style.setProperty('--student', i.studentColor);
   resize();
   void document.fonts.ready.then(() => {
     fontsReady = true;
-    dirty = true;
+    markDirty();
     ipc.send('overlay:ready', { displayId: i.display.id });
   });
 });
 
-ipc.on('overlay:cursor', (f) => cursor.pushFrame(f));
-ipc.on('overlay:flight', (f) => cursor.startFlight(f));
-ipc.on('overlay:trace', (t) => cursor.startTrace(t));
+ipc.on('overlay:cursor', (f) => {
+  cursor.pushFrame(f);
+  // The student's pointer: cards and chips it comes near fade out of its way.
+  if (f.mouse) ui.setPointer(f.mouse);
+  wake();
+});
+ipc.on('overlay:flight', (f) => {
+  cursor.startFlight(f);
+  wake();
+});
+ipc.on('overlay:trace', (t) => {
+  cursor.startTrace(t);
+  wake();
+});
 ipc.on('overlay:penItems', (m) => {
   const now = Date.now();
   for (const [id, it] of penOnly) if (it.revealAt && now - it.revealAt > 60_000) penOnly.delete(id);
   for (const it of m.items) penOnly.set(it.id, { ...it, revealAt: now });
 });
-ipc.on('overlay:cursorCancel', (c) => cursor.cancel(c));
+ipc.on('overlay:cursorCancel', (c) => {
+  cursor.cancel(c);
+  wake();
+});
 ipc.on('overlay:ui', (s) => ui.render(s));
 ipc.on('overlay:calibration', (c) => ui.renderCalibration(c));
 ipc.on('overlay:celebrate', (c) => {
   celebrations.add(c);
-  dirty = true;
+  markDirty();
 });
 ipc.on('overlay:drawMode', (m) => {
   const hint = m.active ? (m.via === 'hold' ? 'Drawing — talk and drag; let go of the keys to send' : 'Drawing — Return to send · Esc to cancel · Shift for straight lines') : '';
   draw.setMode(m, hint);
+  markDirty();
 });
+ipc.on('overlay:answerMode', (m) => answer.setMode(m));
 ipc.on('overlay:ink', (op: InkOp) => applyInk(op));
 
 function applyInk(op: InkOp): void {
@@ -115,28 +164,7 @@ function applyInk(op: InkOp): void {
       }
       break;
   }
-  dirty = true;
-}
-
-/** Comet trail behind the cursor during a swoop: a tapered, fading streak of the tutor's color. */
-function drawTrail(c: CanvasRenderingContext2D, pts: { p: { x: number; y: number }; a: number }[], color: string, scale: number): void {
-  c.save();
-  c.lineCap = 'round';
-  c.shadowColor = color;
-  c.shadowBlur = 10 * scale;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
-    const k = b.a;
-    c.globalAlpha = 0.5 * k * k;
-    c.strokeStyle = color;
-    c.lineWidth = 1 + 5 * k;
-    c.beginPath();
-    c.moveTo(a.p.x, a.p.y);
-    c.lineTo(b.p.x, b.p.y);
-    c.stroke();
-  }
-  c.restore();
+  markDirty();
 }
 
 function liveStrokeItem(): InkItem | null {
@@ -148,7 +176,8 @@ function liveStrokeItem(): InkItem | null {
     kind: 'stroke',
     color: draw.color,
     surface: 'screen',
-    points: s.points.length === 1 ? [s.points[0], { x: s.points[0].x + 0.5, y: s.points[0].y }] : s.points,
+    // A single click is a dot (the renderer draws a stroke with no length as one).
+    points: s.points,
     revealAt: 0,
     drawMs: 1,
     seed: 1,
@@ -156,8 +185,10 @@ function liveStrokeItem(): InkItem | null {
 }
 
 function frame(): void {
+  raf = 0;
   const now = Date.now();
   cursor.update(now);
+  let next = cursor.nextChange(now);
 
   if (init && fontsReady) {
     // garbage-collect fully faded items
@@ -170,8 +201,8 @@ function frame(): void {
     }
     const list = [...items.values()];
     const live = liveStrokeItem();
-    const trail = cursor.trail(now);
-    const animating = renderer.animating(list, now) || celebrations.active || live !== null || trail.length > 0 || cursor.animating;
+    // The canvas only redraws for ink; the cursor is a DOM element with its own schedule.
+    const animating = renderer.animating(list, now) || celebrations.active || live !== null;
     if (dirty || animating || wasAnimating) {
       const b = init.display.bounds;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -182,12 +213,14 @@ function frame(): void {
         renderer.forget('__live__');
         renderer.render(ctx, [live], now, dpr);
       }
-      if (trail.length > 1) drawTrail(ctx, trail, init.tutorColor, dpr);
       celebrations.render(ctx, now, dpr, renderer.fontFamily);
       dirty = false;
     }
     wasAnimating = animating;
+    if (animating) next = now;
+    else next = Math.min(next, renderer.nextChange(list, now));
   }
-  requestAnimationFrame(frame);
+  if (next <= now + 20) wake();
+  else if (Number.isFinite(next)) sleepTimer = window.setTimeout(wake, Math.max(0, next - Date.now() - 12));
 }
-requestAnimationFrame(frame);
+wake();

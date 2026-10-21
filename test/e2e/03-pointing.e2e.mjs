@@ -75,17 +75,53 @@ try {
   await captureOverlay(app, ids[0], join(artifacts, `p3-${tag}-point.png`));
   await screenShot(app, ids[0], join(artifacts, `p3-${tag}-point-screen.png`));
 
+  // --- 1b. she stays where she left it, and dims so it never covers the student's work ------
+  const buddy = async () => {
+    for (const w of app.windows()) {
+      const info = await w.evaluate(() => {
+        if (window.pw?.role !== 'overlay') return null;
+        const el = document.querySelector('.buddy');
+        return { id: window.pw.displayId, presence: el?.dataset.presence, opacity: Number(getComputedStyle(el).opacity), label: getComputedStyle(el.querySelector('.buddy-label')).opacity };
+      }).catch(() => null);
+      if (info && info.id === ids[0]) return info;
+    }
+    return null;
+  };
+  const restAt = await main(app, () => globalThis.__pairwise.session.cursor.position);
+  for (const [dx, dy] of [[300, 400], [-200, 250], [520, 120], [40, 380]]) {
+    pointer.move(d1.bounds.x + Math.max(10, Math.min(d1.bounds.width - 10, restAt.x - d1.bounds.x + dx * f)), d1.bounds.y + Math.max(10, Math.min(d1.bounds.height - 10, restAt.y - d1.bounds.y + dy * f)));
+    await sleep(250);
+  }
+  const still = await main(app, () => globalThis.__pairwise.session.cursor.position);
+  assert.deepEqual(still, restAt, 'the cursor stays put while the student moves their mouse');
+  await waitFor(async () => (await buddy())?.presence === 'idle', { label: 'cursor dims when idle', timeout: 9000 });
+  await sleep(700); // let the fade finish
+  const idle = await buddy();
+  assert.ok(Math.abs(idle.opacity - 0.35) < 0.06, `idle cursor at ~35% (${idle.opacity})`);
+  assert.ok(Number(idle.label) < 0.05, 'and its label is hidden');
+  await screenShot(app, ids[0], join(artifacts, `p3-${tag}-cursor-idle-screen.png`));
+  pointer.move(restAt.x + 18 * f, restAt.y + 26 * f);
+  await waitFor(async () => (await buddy())?.presence === 'near', { label: 'cursor fades when the pointer comes close', timeout: 4000 });
+  await sleep(450);
+  const near = await buddy();
+  assert.ok(near.opacity < 0.2, `near cursor at ~12% (${near.opacity})`);
+  await screenShot(app, ids[0], join(artifacts, `p3-${tag}-cursor-near-screen.png`));
+  pointer.move(d1.bounds.x + 40, d1.bounds.y + d1.bounds.height - 60);
+  report.push(`idle cursor: opacity ${idle.opacity.toFixed(2)}, near ${near.opacity.toFixed(2)}, stayed at ${Math.round(restAt.x)},${Math.round(restAt.y)}`);
+
   // --- 2. annotate: a circle drawn around the button encloses it (rendered pixels) ----------
   const r2 = await callTool(app, 'annotate', { items: [{ kind: 'circle', target: 'the "Submit" button' }] });
   assert.equal(r2.response.drawn, 1, JSON.stringify(r2.response));
-  // Pen traces the loop, holds, then the cursor heads back to the student's pointer.
-  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.currentMode === 'follow'), { label: 'cursor done drawing', timeout: 12000 });
+  // Pen traces the loop, then the cursor stays where it finished.
+  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.currentMode === 'parked'), { label: 'cursor done drawing', timeout: 12000 });
+  await screenShot(app, ids[0], join(artifacts, `p3-${tag}-circle-drawn-screen.png`));
+  // Resting on the circle's end, the cursor dims (and so drops out of the ink-pixel count).
+  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.presence !== 'active'), { label: 'cursor idle after drawing', timeout: 8000 });
   await sleep(700);
   const submit = win.els.submit;
-  const cur = await main(app, () => globalThis.__pairwise.session.cursor.position);
   await captureOverlay(app, ids[0], join(artifacts, `p3-${tag}-circle.png`));
   await screenShot(app, ids[0], join(artifacts, `p3-${tag}-circle-screen.png`));
-  const ring = await inkPixelsBBox(app, ids[0], color, inflate(submit, 90 * f), { x: cur.x - 4, y: cur.y - 4, width: 130, height: 60 });
+  const ring = await inkPixelsBBox(app, ids[0], color, inflate(submit, 90 * f));
   assert.ok(ring.pixels > 200, `circle ink rendered (${ring.pixels} px)`);
   assert.ok(contains(ring, submit, 1), `circle ${JSON.stringify(ring)} encloses Submit ${JSON.stringify(submit)}`);
   assert.ok(contains(inflate(submit, 55 * f), ring), 'circle hugs the button (within 55 px)');
@@ -96,13 +132,13 @@ try {
   await sleep(800);
   const r3 = await callTool(app, 'annotate', { items: [{ kind: 'underline', target: 'the word "factorial" on line 1' }] });
   assert.equal(r3.response.drawn, 1, JSON.stringify(r3.response));
-  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.currentMode === 'follow'), { label: 'cursor done underlining', timeout: 12000 });
+  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.currentMode === 'parked'), { label: 'cursor done underlining', timeout: 12000 });
+  await waitFor(() => main(app, () => globalThis.__pairwise.session.cursor.presence !== 'active'), { label: 'cursor idle after underlining', timeout: 8000 });
   await sleep(700);
   const word = win.els.fact;
-  const cur3 = await main(app, () => globalThis.__pairwise.session.cursor.position);
   await captureOverlay(app, ids[0], join(artifacts, `p3-${tag}-underline.png`));
   await screenShot(app, ids[0], join(artifacts, `p3-${tag}-underline-screen.png`));
-  const ul = await inkPixelsBBox(app, ids[0], color, { x: word.x - 40, y: word.y + word.height * 0.4, width: word.width + 80, height: word.height }, { x: cur3.x - 4, y: cur3.y - 4, width: 130, height: 60 });
+  const ul = await inkPixelsBBox(app, ids[0], color, { x: word.x - 40, y: word.y + word.height * 0.4, width: word.width + 80, height: word.height });
   assert.ok(ul.pixels > 40, `underline rendered (${ul.pixels} px)`);
   assert.ok(ul.y >= word.y + word.height * 0.55 && ul.y <= word.y + word.height + 14, `underline sits under the word (y ${Math.round(ul.y)} vs word ${Math.round(word.y)}–${Math.round(word.y + word.height)})`);
   assert.ok(ul.x <= word.x + 6 && ul.x + ul.width >= word.x + word.width - 6, `underline spans the word (${Math.round(ul.x)}–${Math.round(ul.x + ul.width)} vs ${Math.round(word.x)}–${Math.round(word.x + word.width)})`);

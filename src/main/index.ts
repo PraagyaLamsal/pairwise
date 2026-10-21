@@ -1,9 +1,11 @@
 import type { IndexStatus } from '@shared/courses';
 import { join } from 'node:path';
-import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
-import { APP_ID, APP_NAME } from '@shared/app-info';
+import { app, dialog, ipcMain, Notification, shell, type IpcMainInvokeEvent } from 'electron';
+import { basename } from 'node:path';
+import { APP_ID, APP_NAME, WHATS_NEW } from '@shared/app-info';
 import type { InvokeChannel, InvokeMap, SendMap } from '@shared/ipc';
 import { findConflicts } from '@shared/shortcuts';
+import { displayForPoint } from '@shared/geometry';
 import { env } from './env';
 import { initLogFile, logger } from './log';
 import { SettingsService } from './settings';
@@ -15,7 +17,8 @@ import { EngineHost } from './windows/engine';
 import { HudWindow } from './windows/hud';
 import { HubWindow } from './windows/hub';
 import { registry } from './windows/registry';
-import { AppTray } from './tray';
+import { AppTray, type TrayActions } from './tray';
+import { AppMenus } from './app-menu';
 import { createSession } from './session';
 
 const log = logger('app');
@@ -50,7 +53,7 @@ async function main(): Promise<void> {
   initLogFile(join(dataDir, 'logs'));
   log.info(`${APP_NAME} ${app.getVersion()} starting (${process.platform}, electron ${process.versions.electron})${env.fakePlatform ? ' [fake platform]' : ''}`);
   if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
-  if (env.isMac && !env.e2e) app.dock?.hide();
+  // A normal Dock app (round 2): the Dock icon opens the hub, its menu starts a session.
 
   const settings = new SettingsService(dataDir);
   const courses = new CourseStore(dataDir);
@@ -59,11 +62,13 @@ async function main(): Promise<void> {
   const engine = new EngineHost();
   const hub = new HubWindow();
   const hotkeys = new HotkeyService(settings.get().shortcuts, platform.hooks);
+  // The session bar opens on the display the student is working on, where they last put it.
   const hud = new HudWindow(() => {
     const s = settings.get();
-    const primary = platform.displays.primary();
-    const saved = s.hudPosition && platform.displays.byId(s.hudPosition.displayId ?? '') ? s.hudPosition : undefined;
-    return { display: primary, saved };
+    const display = displayForPoint(platform.displays.list(), platform.displays.cursor()) ?? platform.displays.primary();
+    const saved = s.hudPositions?.[display.id];
+    const fits = saved && saved.x >= display.bounds.x - 40 && saved.y >= display.bounds.y - 10 && saved.x < display.bounds.x + display.bounds.width - 60 && saved.y < display.bounds.y + display.bounds.height - 30;
+    return { display, saved: fits ? saved : undefined };
   });
 
   // Global hooks need Accessibility on macOS; start them as soon as it is granted.
@@ -77,19 +82,26 @@ async function main(): Promise<void> {
 
   const session = createSession({ settings, courses, platform, engine, hud, hotkeys, usage, hub });
 
+  // Menu-bar icon, Dock menu and app menu share the same actions.
+  const actions: TrayActions = {
+    startSession: (courseId, resume) => void session.start({ courseId, resume }).then((r) => !r.ok && r.error && hub.open('courses')),
+    endSession: () => void session.end(),
+    toggleMute: () => void session.command({ type: 'toggleMute' }),
+    toggleVision: () => void session.command({ type: 'toggleVision' }),
+    toggleWhiteboard: () => void session.command({ type: 'toggleWhiteboard' }),
+    openHub: (tab) => hub.open(tab),
+    quit: () => app.quit(),
+  };
   const tray = new AppTray(
-    {
-      startSession: (courseId, resume) => void session.start({ courseId, resume }).then((r) => !r.ok && r.error && hub.open('courses')),
-      endSession: () => void session.end(),
-      toggleMute: () => void session.command({ type: 'toggleMute' }),
-      toggleVision: () => void session.command({ type: 'toggleVision' }),
-      toggleWhiteboard: () => void session.command({ type: 'toggleWhiteboard' }),
-      openHub: (tab) => hub.open(tab),
-      quit: () => app.quit(),
-    },
+    actions,
     () => ({ courses: courses.list(), snapshot: session.snapshot, usage: usage.summary(), settings: settings.get() }),
   );
   tray.create();
+  const menus = new AppMenus(
+    actions,
+    () => ({ courses: courses.list(), snapshot: session.snapshot, settings: settings.get() }),
+  );
+  menus.refresh();
 
   // Fan-out of state changes ------------------------------------------------------
   let trayKey = '';
@@ -106,19 +118,47 @@ async function main(): Promise<void> {
     if (key !== trayKey) {
       trayKey = key;
       tray.refresh();
+      menus.refresh();
     }
   });
   session.on('needCourse', () => hub.open('courses'));
+  session.on('notesWritten', (file: string | null, courseId: string) => {
+    registry.send(['hub'], 'session:notesWritten', { courseId, file });
+    if (file) notifyNotesSaved(file, courseId);
+  });
+
+  /**
+   * "Notes saved" in Notification Center when a session's notes land (they're written a moment
+   * after it ends) — unless the course page is already in front of the student. Click: open them.
+   */
+  function notifyNotesSaved(file: string, courseId: string): void {
+    if (!settings.get().notes.notify || hub.window?.isFocused()) return;
+    const course = courses.get(courseId);
+    const title = basename(file).replace(/^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} /, '').replace(/\.md$/, '');
+    const checks = courses.getResume(courseId)?.checks;
+    const body = [course?.code, title, checks?.total ? `✓ ${checks.right} of ${checks.total} quick checks` : ''].filter(Boolean).join(' · ');
+    if (env.e2e) ((globalThis as Record<string, unknown>).__notifications as unknown[] | undefined)?.push({ title: 'Session notes saved', body, file });
+    try {
+      if (!Notification.isSupported()) return;
+      const n = new Notification({ title: 'Session notes saved', body, silent: true });
+      n.on('click', () => void shell.openPath(file));
+      n.show();
+    } catch (e) {
+      log.debug('notification failed', e);
+    }
+  }
   session.on('openWhiteboard', () => session.openWhiteboard());
   session.coursework.brain.on('progress', (courseId: string, status: IndexStatus) => registry.broadcast('courses:indexProgress', { courseId, status }));
   courses.on('changed', (list) => {
     registry.broadcast('courses:changed', list);
     tray.refresh();
+    menus.refresh();
   });
   settings.on('changed', (s) => {
     registry.broadcast('settings:changed', s);
     hotkeys.setBindings(s.shortcuts);
     tray.refresh();
+    menus.refresh();
   });
   usage.on('changed', (u) => {
     registry.send(['hub', 'hud'], 'usage:changed', u);
@@ -134,6 +174,7 @@ async function main(): Promise<void> {
     version: app.getVersion(),
     platform: process.platform,
     demo: session.demoMode(),
+    keyUnreadable: settings.keyUnreadable,
     fakePlatform: env.fakePlatform,
     tutorName: settings.get().tutorName,
   }));
@@ -208,14 +249,19 @@ async function main(): Promise<void> {
   });
   handle('hud:moveBy', (_e, dx, dy) => {
     const p = hud.moveBy(dx, dy);
-    if (p) settings.update({ hudPosition: { ...p, displayId: session.activeDisplay().id } });
+    const b = hud.bounds();
+    if (!p || !b) return;
+    // Remembered for the display the bar now sits on.
+    const d = displayForPoint(platform.displays.list(), { x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    if (d) settings.update({ hudPositions: { [d.id]: p } });
   });
   handle('hud:setSize', (_e, w, h) => hud.setSize(w, h));
   handle('veil:runningApps', () => platform.runningApps());
   handle('shortcuts:conflicts', (_e, map) => findConflicts(map));
   handle('whiteboard:snapshot', () => session.saveWhiteboardSnapshot());
   handle('whiteboard:state', () => session.whiteboard.state());
-  handle('onboarding:complete', () => settings.update({ onboardingComplete: true }));
+  // A new student has just seen everything in onboarding: no "What's new" card for them.
+  handle('onboarding:complete', () => settings.update({ onboardingComplete: true, whatsNewSeen: WHATS_NEW.id }));
 
   ipcMain.on('overlay:ready', (_e, m: SendMap['overlay:ready']) => session.overlays.markReady(m.displayId));
   ipcMain.on('overlay:hover', (_e, m: SendMap['overlay:hover']) => session.overlays.setHoverInteractive(m.displayId, m.interactive));
@@ -244,13 +290,14 @@ async function main(): Promise<void> {
     platform.hooks.stop();
   });
   app.on('window-all-closed', () => {
-    /* menu-bar app: keep running */
+    /* keep running: the menu-bar icon, the Dock icon and the hotkeys stay available */
   });
   app.on('second-instance', () => hub.open());
   app.on('activate', () => hub.open());
 
-  // First launch → onboarding; afterwards the course picker.
-  if (!env.e2e || process.env.PAIRWISE_OPEN_HUB === '1') hub.open(settings.get().onboardingComplete ? 'courses' : 'onboarding');
+  // First launch → onboarding; afterwards the course picker (or Settings → Gemini if the saved
+  // key was written by another build and has to be pasted again).
+  if (!env.e2e || process.env.PAIRWISE_OPEN_HUB === '1') hub.open(!settings.get().onboardingComplete ? 'onboarding' : settings.keyUnreadable ? 'settings' : 'courses');
 
   if (env.e2e) {
     (globalThis as Record<string, unknown>).__pairwise = { session, courses, settings, platform, hotkeys, usage, hub, hud, engine, registry };

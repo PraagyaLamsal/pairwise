@@ -73,6 +73,8 @@ export interface ResumeState {
   transcriptTail: { speaker: 'student' | 'tutor'; text: string }[];
   liveHandle?: { handle: string; savedAt: number; model: string };
   lastNotesFile?: string;
+  /** Last session's "Show me" questions: how many they got right. */
+  checks?: { right: number; total: number };
 }
 
 export const COURSE_COLORS = ['#2F7BFF', '#16A34A', '#E5484D', '#9B5DE5', '#F59E0B', '#0EA5E9', '#EC4899', '#14B8A6'];

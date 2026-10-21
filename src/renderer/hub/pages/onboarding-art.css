@@ -66,32 +66,35 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
 }
+/* Tuple's paint, like Ada's real ink: one flat colour, round ends, no glow. */
 .ob-ink .ring,
 .ob-ink .arrow,
 .ob-ink .arrow-head {
   stroke: #2f7bff;
-  stroke-width: 3;
-  filter: drop-shadow(0 0 4px rgba(47, 123, 255, 0.7));
+  stroke-width: 3.6;
 }
 .ob-ink .ring { animation: ob-ring 9s infinite; }
 .ob-ink .arrow { animation: ob-arrow 9s infinite; }
 .ob-ink .arrow-head { animation: ob-head 9s infinite; }
 .ob-ink .underline {
   stroke: #ff8a1f;
-  stroke-width: 3.2;
+  stroke-width: 3.6;
   animation: ob-under 9s infinite;
 }
+/* A typed note, letter by letter, like Ada's real ones. */
 .ob-note {
   position: absolute;
   left: 202px;
-  top: 44px;
-  font-family: var(--font-hand);
-  font-weight: 700;
-  font-size: 22px;
-  color: #6aa3ff;
-  text-shadow: 0 0 10px rgba(47, 123, 255, 0.45);
-  clip-path: inset(0 100% 0 0);
-  animation: ob-note 9s infinite;
+  top: 47px;
+  white-space: pre;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter Variable', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: #5c9bff;
+}
+.ob-note span {
+  opacity: 0;
+  animation: ob-key 9s infinite both;
 }
 .ob-cursor {
   position: absolute;
@@ -99,21 +102,23 @@
   top: 0;
   offset-path: path('M 360 260 C 300 230, 200 130, 134 96');
   offset-rotate: 0deg;
-  offset-anchor: 3px 2px;
+  offset-anchor: 3px 3px;
   animation: ob-fly 9s infinite;
-  filter: drop-shadow(0 0 7px rgba(47, 123, 255, 0.85));
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
 }
 .ob-label {
   position: absolute;
-  left: 18px;
-  top: 16px;
-  padding: 2px 8px;
+  left: 17px;
+  top: 21px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
   border-radius: 6px;
   background: #2f7bff;
   color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  box-shadow: 0 0 10px rgba(47, 123, 255, 0.6);
+  font-size: 11.5px;
+  font-weight: 650;
 }
 .ob-caption {
   width: 420px;
@@ -154,11 +159,11 @@
   86% { stroke-dashoffset: 0; opacity: 1; }
   94%, 100% { stroke-dashoffset: 0; opacity: 0; }
 }
-@keyframes ob-note {
-  0%, 46% { clip-path: inset(0 100% 0 0); opacity: 1; }
-  56% { clip-path: inset(0 0 0 0); }
-  86% { clip-path: inset(0 0 0 0); opacity: 1; }
-  94%, 100% { clip-path: inset(0 0 0 0); opacity: 0; }
+@keyframes ob-key {
+  0%, 47% { opacity: 0; }
+  47.2% { opacity: 1; }
+  86% { opacity: 1; }
+  94%, 100% { opacity: 0; }
 }
 @keyframes ob-under {
   0%, 60% { stroke-dashoffset: 1; opacity: 1; }
@@ -169,10 +174,10 @@
 @media (prefers-reduced-motion: reduce) {
   .ob-cursor,
   .ob-ink path,
-  .ob-note {
+  .ob-note span {
     animation: none;
     offset-distance: 100%;
     stroke-dashoffset: 0;
-    clip-path: none;
+    opacity: 1;
   }
 }

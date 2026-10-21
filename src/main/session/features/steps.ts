@@ -98,7 +98,7 @@ export class StepsFeature {
       if (rect) {
         const tip = pointTip(rect);
         const c = this.s.cursor;
-        c.cancelFuture(Date.now(), false);
+        c.cancelFuture(Date.now());
         c.schedule([{ kind: 'fly', to: tip, label }], Math.max(Date.now(), at), label, 60_000);
         // A ring that keeps breathing around the target until the step is done.
         const ring: InkItem = {
@@ -143,6 +143,8 @@ export class StepsFeature {
 
       if (expect === 'click' && hooks.running && hit) {
         const onDown = (e: MouseEvt) => {
+          // An answer to a "show me" question never reached the app, so it isn't the step.
+          if (this.s.quiz.takingClicks) return;
           if (rectContains(hit, { x: e.x, y: e.y })) this.finishWatch({ done: true, how: 'clicked the target' });
         };
         hooks.on('mousedown', onDown);
@@ -153,7 +155,7 @@ export class StepsFeature {
         let since = 0;
         const timer = setInterval(() => {
           const p = this.s.deps.platform.displays.cursor();
-          if (rectContains(hit, p)) {
+          if (rectContains(hit, p) && !this.s.quiz.takingClicks) {
             if (!since) since = Date.now();
             if (Date.now() - since > (expect === 'hover' ? 350 : 900)) this.finishWatch({ done: true, how: expect === 'hover' ? 'hovered the target' : 'moved onto the target' });
           } else since = 0;
@@ -209,6 +211,8 @@ export class StepsFeature {
     this.watch = null;
     for (const c of w.cleanup) c();
     if (w.ringId) this.s.ink.fade({ ids: [w.ringId] });
+    // Done waiting: the cursor stays put but steps back (dims) instead of holding its label.
+    this.s.cursor.relax();
     if (this.s.snapshot.activity === 'waiting') this.s.setActivity('idle');
     log.info(`step ${result.done ? 'done' : 'not done'}: ${result.how}`);
     w.resolve(result);

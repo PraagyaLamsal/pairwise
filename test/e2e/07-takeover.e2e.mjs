@@ -113,7 +113,9 @@ try {
     return s.snapshot.driving;
   }, clickAt);
   assert.equal(reclaimed, 'none', 'reclaimed synchronously on the first real mouse event');
-  assert.equal(await S(() => globalThis.__pairwise.session.cursor.currentMode), 'follow');
+  assert.equal(await S(() => globalThis.__pairwise.session.cursor.currentMode), 'parked', 'the cursor stays where it last drove to');
+  const parkedAt = await S(() => globalThis.__pairwise.session.cursor.position);
+  assert.ok(Math.hypot(parkedAt.x - clickAt.x, parkedAt.y - clickAt.y) < 3, `parked at the last driven spot ${JSON.stringify(parkedAt)} vs ${JSON.stringify(clickAt)}`);
   assert.ok(!(await S(() => globalThis.__pairwise.session.ui)).driving);
 
   // --- 4. allow with the hotkey; the student takes over mid-typing ---------------------------

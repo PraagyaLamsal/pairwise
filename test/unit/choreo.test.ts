@@ -139,6 +139,15 @@ describe('marks', () => {
     expect(corner.y).toBeGreaterThan(24);
   });
 
+  it("an arrow's tail keeps clear of Pairwise's own UI (the session pill)", () => {
+    const style = { color: '#3380FF', author: 'tutor' as const, surface: 'screen' as const };
+    const preferred = arrowTail(target, display);
+    const pill = { x: preferred.x - 130, y: preferred.y - 22, width: 260, height: 44 };
+    const [arrow] = buildInk([{ kind: 'arrow', rect: target }], display, { ...style, avoid: [pill] });
+    const f = arrow.from!;
+    expect(f.x > pill.x - 40 && f.x < pill.x + pill.width + 40 && f.y > pill.y - 20 && f.y < pill.y + pill.height + 20).toBe(false);
+  });
+
   it('notes go right of the target, or left when there is no room', () => {
     expect(notePosition(target, 'base case', display).x).toBeGreaterThan(target.x + target.width);
     const edge = { x: 1300, y: 400, width: 120, height: 40 };

@@ -6,6 +6,7 @@ import { ipc } from '../../ui/ipc';
 import { useCourses, useIpcEvent, useSettings, useSnapshot } from '../../ui/hooks';
 import { Button, Kbd, Modal, Pill, Select, Spinner, TextField } from '../../ui/kit';
 import { InkRing } from '../../ui/ink';
+import { WHATS_NEW } from '@shared/app-info';
 
 /** Quick-add suggestions for the first run (the student's Fall 2026 Carleton courses). */
 const SUGGESTIONS = [
@@ -87,6 +88,7 @@ export function Courses() {
           <p>Choose a course, then start a session. The tutor sticks to that course's material.</p>
         </div>
       </div>
+      {settings?.onboardingComplete && settings.whatsNewSeen !== WHATS_NEW.id && <WhatsNew onDone={() => void ipc.invoke('settings:update', { whatsNewSeen: WHATS_NEW.id })} />}
       <div className="course-layout">
         <div className="course-list">
           {courses.map((c, i) => (
@@ -110,6 +112,31 @@ export function Courses() {
       </div>
       <CourseEditor open={editing !== null} course={editing === 'new' ? null : editing} prefill={prefill} onClose={() => { setEditing(null); setPrefill(null); }} />
     </div>
+  );
+}
+
+/** Once, after an update: what she can do now that she couldn't before. */
+function WhatsNew({ onDone }: { onDone: () => void }) {
+  return (
+    <section className="whats-new" aria-label="What's new">
+      <div className="wn-head">
+        <span className="hand">New:</span>
+        <Button size="s" variant="ghost" onClick={onDone}>
+          Got it
+        </Button>
+      </div>
+      <div className="wn-items">
+        {WHATS_NEW.items.map((it) => (
+          <div key={it.title} className="wn-item">
+            <Icon name={it.icon as IconName} size={15} />
+            <div>
+              <b>{it.title}</b>
+              <span>{it.text}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -140,10 +167,11 @@ function CourseDetail({ course, onEdit }: { course: Course; onEdit: () => void }
     setError(null);
   }, [load]);
   useIpcEvent('courses:indexProgress', (p) => p.courseId === course.id && p.status.state === 'ready' && void load());
-  // A session just ended: its notes are new.
+  // A session just ended: its notes are new (they're written a moment later, in the background).
   useEffect(() => {
     if (snap.status === 'idle') void load();
   }, [snap.status, load]);
+  useIpcEvent('session:notesWritten', (m) => m.courseId === course.id && void load());
 
   const live = snap.status !== 'idle' && snap.status !== 'error' && snap.courseId === course.id;
 
@@ -207,6 +235,11 @@ function CourseDetail({ course, onEdit }: { course: Course; onEdit: () => void }
           <div className="resume-note">
             <span className="hand">Last time:</span>
             {resume.summary}
+            {resume.checks && resume.checks.total > 0 && (
+              <span className="checks-chip" title="Ada's “Show me” questions last session">
+                ✓ {resume.checks.right} of {resume.checks.total} quick check{resume.checks.total === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
         )}
         {assignment && !live && (

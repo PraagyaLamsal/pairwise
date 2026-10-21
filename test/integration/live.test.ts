@@ -162,6 +162,59 @@ describe('LiveLink reconnection', () => {
     link.close();
   });
 
+  it('rides out a dropped connection: keeps trying until the server is back, then says how long it was gone', async () => {
+    const port = Number(new URL(url).port);
+    const link = new LiveLink(() => url, (h) => setup(h));
+    await link.open();
+    const back = new Promise<number>((r) => link.once('reconnected', (ms: number) => r(ms)));
+    let fatal = false;
+    link.on('fatal', () => (fatal = true));
+    await server.stop(); // the Wi-Fi goes
+    await sleep(1600);
+    expect(link.status).toBe('reconnecting');
+    server = new MockLiveServer(async () => null, 'Ada', 20);
+    await server.start(port); // …and comes back
+    const down = await back;
+    expect(fatal).toBe(false);
+    expect(down).toBeGreaterThan(1400);
+    expect(link.ready).toBe(true);
+    const resumed = server.stats.setups[0] as { sessionResumption?: { handle?: string } };
+    expect(resumed.sessionResumption?.handle).toBe('mock-handle-1'); // the same conversation
+    link.close();
+  }, 20_000);
+
+  it('waits while the Mac is offline instead of using up attempts', async () => {
+    let online = true;
+    const link = new LiveLink(() => url, (h) => setup(h), { online: () => online });
+    await link.open();
+    const setups = () => server.stats.setups.length;
+    const before = setups();
+    online = false;
+    const back = new Promise<void>((r) => link.once('reconnected', () => r()));
+    // An abrupt drop (no close handshake), like a network going away.
+    for (const c of [...(server as unknown as { conns: Set<{ ws: { terminate(): void } }> }).conns]) c.ws.terminate();
+    await sleep(1500);
+    expect(setups()).toBe(before); // no attempts while offline
+    online = true;
+    await back;
+    expect(setups()).toBe(before + 1);
+    link.close();
+  }, 20_000);
+
+  it('gives up (and says so) only after the time limit', async () => {
+    const link = new LiveLink(() => url, (h) => setup(h), { giveUpAfterMs: 1800 });
+    await link.open();
+    const t0 = Date.now();
+    const gone = new Promise<number>((r) => link.once('fatal', () => r(Date.now() - t0)));
+    await server.stop();
+    const ms = await gone;
+    expect(ms).toBeGreaterThan(900);
+    expect(ms).toBeLessThan(3500);
+    expect(link.status).toBe('closed');
+    server = new MockLiveServer(async () => null, 'Ada', 20);
+    await server.start();
+  }, 20_000);
+
   it('falls back to a fresh session when the resume handle is rejected', async () => {
     // A server that refuses resumption: close on setup with a handle.
     const link = new LiveLink(() => url, (h) => (h === 'stale' ? { ...setup(h), model: 'bad' } : setup(h)));

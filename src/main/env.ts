@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, systemPreferences } from 'electron';
 
 /**
  * Runtime switches. All default to "real" behaviour; the PAIRWISE_* variables exist so the
@@ -22,3 +22,17 @@ export const env = {
   userDataDir: process.env.PAIRWISE_USER_DATA,
   apiKeyFromEnv: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
 };
+
+/**
+ * macOS "Reduce motion" (System Settings → Accessibility → Display). PAIRWISE_REDUCED_MOTION=1
+ * (or 0) forces it, for tests and for trying it out.
+ */
+export function prefersReducedMotion(): boolean {
+  const forced = process.env.PAIRWISE_REDUCED_MOTION;
+  if (forced === '1' || forced === '0') return forced === '1';
+  try {
+    return systemPreferences.getAnimationSettings().prefersReducedMotion;
+  } catch {
+    return false;
+  }
+}

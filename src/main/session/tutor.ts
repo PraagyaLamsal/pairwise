@@ -1,3 +1,4 @@
+import { net } from 'electron';
 import { GEMINI_API_BASE, GEMINI_LIVE_PATH } from '@shared/app-info';
 import type { IndexStatus, ResumeState, SearchHit } from '@shared/courses';
 import type { DisplayInfo, FrameRef } from '@shared/geometry';
@@ -20,6 +21,8 @@ import { TakeoverFeature } from './features/takeover';
 import { VeilFeature } from './features/veil';
 import { WhiteboardFeature } from './features/whiteboard';
 import { NotesFeature } from './features/notes';
+import { QuizFeature } from './features/quiz';
+import { StickyInk } from './features/sticky';
 import type { CalReport } from '../vision/calibration';
 import { GeminiRest } from '../gemini/rest';
 import { liveUrl, type FunctionCall, type LiveSetup } from '../gemini/live';
@@ -86,12 +89,17 @@ export class TutorSession extends SessionController {
   readonly whiteboard: WhiteboardFeature;
   /** Session notes written to the course folder at the end (save_note collects into them). */
   readonly sessionNotes: NotesFeature;
+  /** "Show me": ask_to_point takes the student's click as their answer. */
+  readonly quiz: QuizFeature;
+  readonly sticky: StickyInk;
   /** The notes for the last session, while they are being written (tests await it). */
   notesWriting: Promise<void> | null = null;
   private lastQuestionFrameAt = 0;
   private thinkingTimer: NodeJS.Timeout | null = null;
   private displayTimer: NodeJS.Timeout | null = null;
   private lastLevelsAt = 0;
+  private lastLevels = { mic: -1, out: -1 };
+  private levelsTimer: NodeJS.Timeout | null = null;
   private micLevel = 0;
   private warnedBudget = false;
   private detach: (() => void)[] = [];
@@ -101,6 +109,7 @@ export class TutorSession extends SessionController {
   private notes: string[] = [];
   private noteTimer: NodeJS.Timeout | null = null;
   private interimStudent = '';
+  private explainedMediaPause = false;
 
   constructor(readonly full: SessionDeps & { hub: HubWindow }) {
     super(full);
@@ -126,6 +135,8 @@ export class TutorSession extends SessionController {
     this.veil = new VeilFeature(this);
     this.whiteboard = new WhiteboardFeature(this);
     this.sessionNotes = new NotesFeature(this);
+    this.quiz = new QuizFeature(this);
+    this.sticky = new StickyInk(this);
   }
 
   demoMode(): boolean {
@@ -149,6 +160,7 @@ export class TutorSession extends SessionController {
     this.frames.clear();
     this.modelFrame = null;
     this.warnedBudget = false;
+    this.explainedMediaPause = false;
 
     // 1. engine: audio + capture
     await this.deps.engine.ensure();
@@ -202,7 +214,7 @@ export class TutorSession extends SessionController {
       const key = this.deps.settings.getApiKey();
       url = env.liveUrl ? `${env.liveUrl}${env.liveUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}` : liveUrl(GEMINI_API_BASE, GEMINI_LIVE_PATH, key);
     }
-    const link = new LiveLink(() => url, (handle) => this.buildSetup(handle));
+    const link = new LiveLink(() => url, (handle) => this.buildSetup(handle), { online: () => net.isOnline() });
     this.link = link;
     this.attachLink(link);
     const fresh = resume?.liveHandle && Date.now() - resume.liveHandle.savedAt < HANDLE_TTL_MS && resume.liveHandle.model === this.liveModel ? resume.liveHandle.handle : undefined;
@@ -243,7 +255,7 @@ export class TutorSession extends SessionController {
         .then((extra) => {
           const prev = this.deps.courses.getResume(courseId);
           if (extra && prev) this.deps.courses.saveResume({ ...prev, ...extra, savedAt: Date.now() });
-          this.emit('notesWritten', extra?.lastNotesFile ?? null);
+          this.emit('notesWritten', extra?.lastNotesFile ?? null, courseId);
         })
         .catch((e) => log.warn('notes failed', e))
         .finally(() => {
@@ -284,7 +296,8 @@ export class TutorSession extends SessionController {
         ...(deep ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
       },
       systemInstruction: { parts: [{ text: systemInstruction({ ...ctx, settings: s }) }] },
-      tools: liveTools((name) => this.tools.has(name)),
+      // Quick checks turned off: the tutor doesn't get the tool at all.
+      tools: liveTools((name) => this.tools.has(name) && !(name === 'ask_to_point' && s.quickChecks === 'off')),
       realtimeInputConfig: {
         automaticActivityDetection: {
           disabled: false,
@@ -367,12 +380,24 @@ export class TutorSession extends SessionController {
 
   private pushLevels(): void {
     const now = Date.now();
-    if (now - this.lastLevelsAt < 50) return;
-    this.lastLevelsAt = now;
+    if (now - this.lastLevelsAt < 50) {
+      // Levels now arrive only when they change: never drop the last one (e.g. back to silence).
+      if (!this.levelsTimer) {
+        this.levelsTimer = setTimeout(() => {
+          this.levelsTimer = null;
+          this.pushLevels();
+        }, 50 - (now - this.lastLevelsAt));
+      }
+      return;
+    }
     const mic = this.snapshot.muted ? 0 : this.micLevel;
-    const out = this.playback.playing ? Math.min(1, this.playback.level * 4) : 0;
-    this.deps.hud.window?.webContents.send('session:levels', { mic, out });
+    const out = this.playback.playing ? Math.round(Math.min(1, this.playback.level * 4) * 50) / 50 : 0;
     this.cursor.setLevel(this.snapshot.activity === 'speaking' ? out : this.snapshot.activity === 'listening' ? mic : 0);
+    // Silence stays silent: the pill isn't re-rendered twenty times a second with zeros.
+    if (mic === this.lastLevels.mic && out === this.lastLevels.out) return;
+    this.lastLevelsAt = now;
+    this.lastLevels = { mic, out };
+    this.deps.hud.window?.webContents.send('session:levels', { mic, out });
   }
 
   // ===========================================================================
@@ -386,6 +411,11 @@ export class TutorSession extends SessionController {
       else if (st === 'open' && this.snapshot.status === 'reconnecting') this.update({ status: 'live' });
     });
     link.on('fatal', (e: Error) => void this.end({ reason: 'connection lost', error: e.message }));
+    link.on('reconnected', (downMs: number, fresh: boolean) => {
+      // A real drop (not the routine ~10-minute GoAway handover): help her pick up the thread.
+      if (fresh) this.note(`[The connection dropped and had to start over. Where you were: ${this.recentContext()}. Pick up from there briefly.]`);
+      else if (downMs > 3000) this.note(`[The connection dropped for ${Math.round(downMs / 1000)} s and is back. Anything they said meanwhile was lost; check in briefly and carry on.]`);
+    });
     link.on('audio', (pcm: Buffer) => {
       this.generating = true;
       this.onTutorAudio(pcm);
@@ -641,7 +671,9 @@ export class TutorSession extends SessionController {
     const r = await this.deps.platform.media.pauseIfPlaying({ videoLikely, frontApp: front?.name });
     if (r.paused) {
       this.update({ mediaPausedByUs: true });
-      this.toast(`Paused ${r.app ?? 'your video'} — resume from the session bar`, 'info', 3200);
+      // The bar shows a resume button from now on; the reason is worth saying once.
+      if (!this.explainedMediaPause) this.toast(`Paused ${r.app ?? 'your video'} while you ask — ▶ in the session bar resumes it`, 'info', 3200);
+      this.explainedMediaPause = true;
       this.note(`[The app paused the student's ${r.app ?? 'video'} while they ask. Use the media tool to resume it when they want.]`);
     }
   }
@@ -669,6 +701,8 @@ export class TutorSession extends SessionController {
     this.applyGate();
     if (this.playback.playing) this.flushTutor('ask');
     this.visual.cancelPending('student asking');
+    // They'd rather ask something than answer the question waiting for them: skip it.
+    this.quiz.skip('they asked something instead');
     void this.autoPauseMedia();
     this.ask.begin(via);
     // The tutor gets a fresh full-detail look the moment a question starts.
@@ -693,8 +727,8 @@ export class TutorSession extends SessionController {
   }
 
   protected override onTalkModeChanged(): void {
+    // The session bar's mic shows the mode (a key badge in hold-to-talk): no toast.
     this.applyGate();
-    this.toast(this.settings.talkMode === 'hands-free' ? 'Hands-free: just talk' : 'Hold-to-talk: hold the ask keys while you speak', 'info');
   }
 
   protected override onVisionChanged(v: 'on' | 'paused'): void {
@@ -785,6 +819,15 @@ export class TutorSession extends SessionController {
   // ===========================================================================
   // Resume state
   // ===========================================================================
+
+  /** The last few things said, in one line (for a tutor whose session had to start over). */
+  private recentContext(): string {
+    const said = this.transcript()
+      .filter((c) => c.speaker !== 'system' && c.text.trim())
+      .slice(-6)
+      .map((c) => `${c.speaker === 'student' ? 'student' : 'you'}: "${c.text.replace(/\s+/g, ' ').trim().slice(0, 160)}"`);
+    return said.length ? said.join('; ') : 'the session had just started';
+  }
 
   protected saveResume(extra: Partial<ResumeState> = {}): void {
     const course = this.course;

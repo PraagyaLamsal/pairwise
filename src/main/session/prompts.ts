@@ -25,6 +25,14 @@ const DEPTH: Record<Settings['explanationDepth'], string> = {
   deep: 'Go deep: build intuition, show the reasoning and a worked example, and connect it to earlier material.',
 };
 
+const CHECK_HOW = 'ask them to click the answer on their own screen (the line where a loop ends, the variable that changes, the button that would run the tests), with the right answer if you know it. Don\'t point at it first. Then wait: when they get it, say so and celebrate; when they don\'t, give a hint and let them try again.';
+
+const QUICK_CHECKS: Record<Settings['quickChecks'], string> = {
+  often: `Check understanding often with ask_to_point — after each idea you explain: ${CHECK_HOW}`,
+  sometimes: `Now and then, check understanding with ask_to_point: ${CHECK_HOW}`,
+  off: 'They turned quick checks off: don\'t quiz them unless they ask you to.',
+};
+
 /** The Live model's system instruction. Kept compact: it's re-read on every turn. */
 export function systemInstruction(ctx: PromptContext): string {
   const { settings: s, course } = ctx;
@@ -63,12 +71,15 @@ export function systemInstruction(ctx: PromptContext): string {
 
   lines.push('', '# Your cursor and pen (they run in the background while you keep talking)');
   lines.push(
-    'Every time you refer to something visible ("this button", "line twelve", "that error"), call point_at in the same breath with a specific target and your best estimate of x,y (0–1000 in the latest frame).',
-    'Use annotate to circle, underline, highlight, box, draw an arrow or write a short note (at most five words). One or two marks per idea — clear_drawings when you move on.',
-    'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s marks appear as you say it.',
+    'Your cursor is your hand on a shared screen; it stays where you leave it. Use it the way a person pairing with them would: every time you refer to something visible ("this button", "line twelve", "that error"), call point_at (with a short label) or move_cursor in the same breath, with a specific target and your best estimate of x,y (0–1000 in the latest frame).',
+    'move_cursor is your everyday gesture: style "hover" to rest on what you mention, "follow_line" to glide under a line of code while you read or explain it, "sweep" to run down a list or block of lines. Use it often — it draws nothing.',
+    'Draw with annotate sparingly, when a mark really helps (the one thing to remember, an arrow that connects two places, a short typed note of at most five words). Usually one mark per idea, often none — clear_drawings when you move on.',
+    'For a walkthrough of something on screen (a block of code, a slide, a stack trace), call explain_on_screen, say a few words while it prepares, then say the lines it returns in order — each line\'s cursor moves and marks happen as you say it.',
+    'When they want to know what code actually does when it runs (what it returns or prints, a variable\'s value at some point, how a loop or recursion unfolds), call trace_code: your cursor steps through the lines as you say the returned script and the values appear beside each line, like a debugger.',
+    QUICK_CHECKS[s.quickChecks],
     'Read code and error messages exactly with read_screen before quoting or debugging them.',
     'Use draw_diagram on the whiteboard for recursion trees, linked lists, arrays, flowcharts and anything there is nothing on screen to draw on.',
-    'For hard reasoning (proofs, tricky traces, subtle bugs) call think_deeply and keep the conversation going while it works.',
+    'For hard reasoning (proofs, subtle bugs, running-time analysis) call think_deeply and keep the conversation going while it works; to show what code does step by step, use trace_code instead.',
   );
 
   const n = ctx.displays.length;
@@ -119,6 +130,7 @@ export function openingTurn(ctx: PromptContext): string {
     if (ctx.resume.toReview.length) parts.push(`To review: ${ctx.resume.toReview.join('; ')}.`);
     parts.push(']');
     parts.push('Greet them in one short sentence, mention in a few words where you left off, and ask whether to continue or start something new.');
+    if (ctx.settings.quickChecks !== 'off' && ctx.resume.toReview.some((t) => t.startsWith('Quick check to try again'))) parts.push('Once they are settled, offer to try a missed quick check again with ask_to_point.');
   } else {
     parts.push('Greet them in one short, friendly sentence and ask what they are working on. Do not describe their screen unless they ask.');
   }

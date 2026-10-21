@@ -217,28 +217,37 @@ try {
   await callTool(app, 'clear_drawings', { who: 'all' });
   await sleep(500);
 
-  // --- 5. explain_on_screen: marks appear line by line as the script is spoken ----------------
+  // --- 5. explain_on_screen: gestures and marks happen line by line as the script is spoken -----
   await main(app, () => {
     const s = globalThis.__pairwise.session;
     globalThis.__words = [];
+    globalThis.__traces = [];
     s.on('tutorWords', (t) => globalThis.__words.push({ t: Date.now(), text: t }));
+    s.cursor.on('trace', (tr) => globalThis.__traces.push({ startAt: tr.startAt, style: tr.style ?? null, ink: Boolean(tr.itemId) }));
     s.mock.afterTool.set('explain_on_screen', (r) => ({ segments: (r.script ?? []).map((say) => ({ say })) }));
     s.mock.speakNow({ segments: [{ tool: 'explain_on_screen', args: { question: 'how does it work?' } }] });
   });
-  await waitFor(() => main(app, () => globalThis.__pairwise.session.ink.all().filter((i) => i.author === 'tutor' && i.kind !== 'ring').length >= 3), { label: 'three beats drawn', timeout: 25_000 });
-  await waitFor(() => main(app, () => !globalThis.__pairwise.session.turn && !globalThis.__pairwise.session.playback.playing), { label: 'explanation finished', timeout: 25_000 });
+  await waitFor(() => main(app, () => globalThis.__pairwise.session.ink.all().filter((i) => i.author === 'tutor' && i.kind !== 'ring').length >= 3), { label: 'the marking beats drawn', timeout: 30_000 });
+  await waitFor(() => main(app, () => !globalThis.__pairwise.session.turn && !globalThis.__pairwise.session.playback.playing), { label: 'explanation finished', timeout: 30_000 });
   const beats = await main(app, () => {
     const ink = globalThis.__pairwise.session.ink.all().filter((i) => i.author === 'tutor');
     const pick = (k) => ink.find((i) => i.kind === k)?.revealAt;
-    return { circle: pick('circle'), underline: pick('underline'), arrow: pick('arrow'), words: globalThis.__words };
+    return { circle: pick('circle'), arrow: pick('arrow'), first: Math.min(...ink.map((i) => i.revealAt)), words: globalThis.__words, traces: globalThis.__traces };
   });
   const firstSaid = (re) => beats.words.find((w) => re.test(w.text))?.t;
-  const l2 = firstSaid(/\bmark\b|important/);
-  const l3 = firstSaid(/connect|next idea/);
-  assert.ok(beats.circle && beats.underline && beats.arrow, JSON.stringify(beats));
-  assert.ok(beats.circle < beats.underline && beats.underline < beats.arrow, 'beats in order');
-  assert.ok(l2 && beats.underline >= l2 - 900, `line 2's mark waits for line 2 (${beats.underline - l2} ms vs its caption)`);
-  assert.ok(l3 && beats.arrow >= l3 - 900, `line 3's mark waits for line 3 (${beats.arrow - l3} ms vs its caption)`);
+  const l1 = firstSaid(/\bdemo\b/);
+  const l2 = firstSaid(/\bfollow\b/);
+  const l3 = firstSaid(/\bmark\b|important/);
+  const l4 = firstSaid(/connect|next idea/);
+  const sweep = beats.traces.find((t) => t.style === 'sweep');
+  const follow = beats.traces.find((t) => t.style === 'read');
+  assert.ok(sweep && follow, `line 1 sweeps and line 2 follows a line with the cursor (${JSON.stringify(beats.traces)})`);
+  assert.ok(l1 && sweep.startAt >= l1 - 900, `the sweep waits for line 1 (${sweep.startAt - l1} ms)`);
+  assert.ok(l2 && follow.startAt >= l2 - 900 && follow.startAt > sweep.startAt, `the line-follow waits for line 2 (${follow.startAt - l2} ms)`);
+  assert.ok(beats.first >= l3 - 900, 'the gesture lines draw nothing: the first ink comes with line 3');
+  assert.ok(beats.circle && beats.arrow && beats.circle < beats.arrow, JSON.stringify(beats));
+  assert.ok(l3 && beats.circle >= l3 - 900, `line 3's mark waits for line 3 (${beats.circle - l3} ms vs its caption)`);
+  assert.ok(l4 && beats.arrow >= l4 - 900, `line 4's mark waits for line 4 (${beats.arrow - l4} ms vs its caption)`);
   await screenShot(app, ids[0], join(artifacts, 'p3-explain-screen.png'));
 
   // --- 6. the ink preview (Setup & checks → Preview): every kind of mark, drawn by the pen ----

@@ -15,6 +15,8 @@ export class SettingsService extends EventEmitter {
   private current: Settings;
   private readonly file: DebouncedJsonFile<Settings>;
   private readonly secretFile: string;
+  /** The stored key exists but can't be decrypted by this build (see ApiKeyStatus.unreadable). */
+  private unreadable = false;
 
   constructor(private readonly dataDir: string) {
     super();
@@ -52,13 +54,24 @@ export class SettingsService extends EventEmitter {
     if (existsSync(this.secretFile)) {
       try {
         const buf = readFileSync(this.secretFile);
-        if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
-        return buf.toString('utf8').replace(/^plain:/, '');
+        const plain = buf.subarray(0, 6).toString('utf8') === 'plain:';
+        const key = plain ? buf.toString('utf8').slice(6) : safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : '';
+        this.unreadable = !key;
+        if (key) return key;
       } catch (e) {
-        log.warn('could not decrypt stored API key', e);
+        // Typically: saved by `npm run dev` (Electron's keychain entry), read by the packaged app
+        // (its own entry), or the other way round. The key has to be pasted again.
+        if (!this.unreadable) log.warn('the stored API key can\'t be decrypted by this build; asking for it again', e);
+        this.unreadable = true;
       }
-    }
+    } else this.unreadable = false;
     return env.apiKeyFromEnv;
+  }
+
+  /** True when a key is saved but this build can't decrypt it. */
+  get keyUnreadable(): boolean {
+    this.getApiKey();
+    return this.unreadable;
   }
 
   apiKeyStatus(): ApiKeyStatus {
@@ -66,8 +79,9 @@ export class SettingsService extends EventEmitter {
     const key = this.getApiKey();
     return {
       hasKey: Boolean(key),
-      source: stored ? 'keychain' : key ? 'env' : 'none',
+      source: stored && !this.unreadable ? 'keychain' : key ? 'env' : 'none',
       preview: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : undefined,
+      ...(this.unreadable ? { unreadable: true } : {}),
     };
   }
 

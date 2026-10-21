@@ -100,7 +100,7 @@ export class DrawInput {
     if (!this.current) return;
     const s = this.current;
     this.current = null;
-    if (s.points.length === 1) s.points.push({ x: s.points[0].x + 0.5, y: s.points[0].y + 0.5 });
+    // A click without a drag stays one point: it is drawn (and described to the tutor) as a dot.
     ipc.send(this.surfaceKind === 'whiteboard' ? 'whiteboard:stroke' : 'overlay:stroke', {
       id: `s-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
       points: s.points,

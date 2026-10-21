@@ -121,6 +121,14 @@ function KeyStep() {
           </div>
         ) : (
           <>
+            {status?.unreadable && (
+              <div className="tip warn">
+                <Icon name="key" size={16} />
+                <span>
+                  The key you saved earlier was saved by another copy of Pairwise (for example <code>npm run dev</code>), and this one can't unlock it. Paste it once more.
+                </span>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               <TextField value={key} onChange={setKey} placeholder="AIza…" type="password" width="100%" onEnter={() => void save()} mono />
               <Button variant="primary" disabled={!key.trim() || busy} onClick={() => void save()}>

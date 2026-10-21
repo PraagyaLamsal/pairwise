@@ -17,6 +17,7 @@ import { OverlayManager } from '../windows/overlays';
 import { registry } from '../windows/registry';
 import { CursorEngine } from './cursor';
 import { InkManager } from './ink';
+import { prefersReducedMotion } from '../env';
 import { logger } from '../log';
 
 const log = logger('session');
@@ -51,7 +52,8 @@ export class SessionController extends EventEmitter {
     this.overlays = new OverlayManager((d) => this.overlayInit(d));
     this.cursor = new CursorEngine(deps.platform.displays, deps.platform.hooks, {
       name: () => this.settings.tutorName,
-      behavior: () => this.settings.cursorBehavior,
+      pointerMatters: (p) => this.overlays.uiRects().some((r) => p.x > r.x - 90 && p.x < r.x + r.width + 90 && p.y > r.y - 90 && p.y < r.y + r.height + 90),
+      reducedMotion: prefersReducedMotion,
     });
     this.ink = new InkManager();
 
@@ -193,9 +195,14 @@ export class SessionController extends EventEmitter {
         this.update({ captions });
         break;
       }
-      case 'toggleHud':
-        this.update({ hudVisible: this.deps.hud.toggle() });
+      case 'toggleHud': {
+        const hudVisible = this.deps.hud.toggle();
+        this.update({ hudVisible });
+        // The bar carries the "can see" eye; without it, the overlay shows a small one.
+        this.ui.hudHidden = !hudVisible;
+        this.pushUi();
         break;
+      }
       case 'clearInk':
         this.ink.fade({});
         break;
@@ -208,9 +215,9 @@ export class SessionController extends EventEmitter {
   protected onTalkModeChanged(): void {}
 
   setMuted(muted: boolean): void {
+    // The session bar shows it (a red mic), so no toast.
     this.update({ muted });
     this.deps.engine.command({ type: 'setMuted', muted });
-    this.toast(muted ? 'Microphone muted' : 'Microphone on', 'info');
   }
 
   setVision(vision: 'on' | 'paused'): void {
@@ -270,7 +277,14 @@ export class SessionController extends EventEmitter {
 
   protected tick(): void {
     if (!this.isActive) return;
-    this.update({ costUsd: this.deps.usage.sessionCost });
+    const costUsd = this.deps.usage.sessionCost;
+    if (costUsd !== this.snapshot.costUsd) this.update({ costUsd });
+    else {
+      // Only the clock moved: windows keep their own timers from the last snapshot, so this
+      // stays in main (the menu-bar timer) instead of waking every window each second.
+      this.snapshot = { ...this.snapshot, elapsedMs: this.elapsed() };
+      this.emit('snapshot', this.snapshot);
+    }
     this.onTick();
   }
 
@@ -319,7 +333,7 @@ export class SessionController extends EventEmitter {
       tutorColor: s.tutorColor,
       studentColor: s.studentInkColor,
       platform: process.platform,
-      reducedMotion: false,
+      reducedMotion: prefersReducedMotion(),
     };
   }
 

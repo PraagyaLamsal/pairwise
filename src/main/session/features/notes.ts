@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Caption } from '@shared/session';
 import type { ResumeState } from '@shared/courses';
 import type { TutorSession } from '../tutor';
+import { checksForNotes, type QuizResult } from './quiz';
 import { logger } from '../../log';
 
 const log = logger('notes');
@@ -67,7 +68,8 @@ export class NotesFeature {
       const text = str(args.text).slice(0, 400);
       if (!text) return { response: { ok: false } };
       this.saved.push({ kind, text, at: Date.now() });
-      this.s.toast(kind === 'to_review' ? `Added to review: ${text.slice(0, 60)}` : `Saved to notes: ${text.slice(0, 60)}`, 'success', 2200);
+      // Say it once per session; after that the notes just fill up quietly.
+      if (this.saved.length === 1) this.s.toast('Saving key points to your session notes', 'success', 2200);
       return { response: { ok: true } };
     });
   }
@@ -100,7 +102,8 @@ export class NotesFeature {
     const students = captions.filter((c) => c.speaker === 'student' && !/^\((demo|you spoke)/.test(c.text));
     // Diagrams belong to the session that drew them: take them out of the board's list.
     const diagrams = this.s.whiteboard.diagrams.splice(0).filter((d) => d.at >= startedAt - 1000);
-    if (students.length === 0 && this.saved.length === 0 && diagrams.length === 0) {
+    const checks = this.s.quiz.takeResults();
+    if (students.length === 0 && this.saved.length === 0 && diagrams.length === 0 && checks.length === 0) {
       log.info('nothing worth noting this session');
       this.reset();
       return null;
@@ -110,7 +113,7 @@ export class NotesFeature {
     const assignment = this.s.snapshot.assignment;
     const endedAt = Date.now();
     this.reset();
-    return () => this.write({ course, captions, saved, screenshots, diagrams, startedAt, endedAt, assignment });
+    return () => this.write({ course, captions, saved, screenshots, diagrams, checks, startedAt, endedAt, assignment });
   }
 
   private async write(j: {
@@ -119,6 +122,7 @@ export class NotesFeature {
     saved: { kind: NoteKind; text: string; at: number }[];
     screenshots: { data: Uint8Array; mime: string; at: number }[];
     diagrams: { title: string; png: Buffer; at: number }[];
+    checks: QuizResult[];
     startedAt: number;
     endedAt: number;
     assignment?: string;
@@ -126,14 +130,17 @@ export class NotesFeature {
     const { course, captions, startedAt } = j;
     const cites = [...new Set(captions.flatMap((c) => c.cites ?? []))];
     const outOfScope = [...new Set(captions.map((c) => c.outOfScope).filter((x): x is string => Boolean(x)))];
+    const checks = checksForNotes(j.checks);
     let draft = heuristicDraft(course.code, captions, j.saved, outOfScope);
     if (this.s.rest.hasKey && !this.s.demoMode()) {
       try {
-        draft = await this.summarize(captions, cites, draft, j.saved);
+        draft = await this.summarize(captions, cites, draft, j.saved, checks.lines);
       } catch (e) {
         log.warn('Gemini notes failed; writing the simple version', e);
       }
     }
+    // A quick check they missed is worth trying again next time.
+    draft = { ...draft, toReview: [...new Set([...draft.toReview, ...checks.missed])] };
     const at = new Date(startedAt || Date.now());
     const dir = this.dirFor(course.id);
     const file = join(dir, notesFileName(at, draft.title));
@@ -154,17 +161,17 @@ export class NotesFeature {
         images.push({ alt: 'What you asked about', rel: `images/${encodeURI(name)}` });
       }
       const minutes = Math.max(1, Math.round((j.endedAt - (startedAt || j.endedAt)) / 60000));
-      await fs.writeFile(file, this.markdown(draft, { course: `${course.code}${course.name ? ` — ${course.name}` : ''}`, at, minutes, cites, images, captions, assignment: j.assignment }), 'utf8');
+      await fs.writeFile(file, this.markdown(draft, { course: `${course.code}${course.name ? ` — ${course.name}` : ''}`, at, minutes, cites, images, captions, checks: checks.lines, assignment: j.assignment }), 'utf8');
       this.lastFile = file;
       log.info(`notes written: ${file}`);
     } catch (e) {
       log.warn('could not write notes', e);
-      return { summary: draft.summary, openQuestions: draft.openQuestions, toReview: draft.toReview };
+      return { summary: draft.summary, openQuestions: draft.openQuestions, toReview: draft.toReview, checks: checks.total ? { right: checks.right, total: checks.total } : undefined };
     }
-    return { summary: draft.summary.slice(0, 400), openQuestions: draft.openQuestions.slice(0, 5), toReview: draft.toReview.slice(0, 8), lastNotesFile: file };
+    return { summary: draft.summary.slice(0, 400), openQuestions: draft.openQuestions.slice(0, 5), toReview: draft.toReview.slice(0, 8), lastNotesFile: file, checks: checks.total ? { right: checks.right, total: checks.total } : undefined };
   }
 
-  private markdown(d: NotesDraft, m: { course: string; at: Date; minutes: number; cites: string[]; images: { alt: string; rel: string }[]; captions: Caption[]; assignment?: string }): string {
+  private markdown(d: NotesDraft, m: { course: string; at: Date; minutes: number; cites: string[]; images: { alt: string; rel: string }[]; captions: Caption[]; checks?: string[]; assignment?: string }): string {
     const tutor = this.s.settings.tutorName;
     const when = m.at.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const L: string[] = [`# ${d.title}`, '', `*${m.course} · ${when} · ${m.minutes} min with ${tutor}${m.assignment ? ` · assignment: ${m.assignment}` : ''}*`, ''];
@@ -176,6 +183,7 @@ export class NotesFeature {
     section('Key ideas', d.keyIdeas);
     section('Definitions', d.definitions);
     section('Mistakes to avoid', d.mistakes);
+    if (m.checks?.length) L.push('## Quick checks', '', ...m.checks.map((x) => `- ${x}`), '');
     section('To review', d.toReview);
     section('Still open', d.openQuestions);
     if (m.images.length) {
@@ -191,7 +199,7 @@ export class NotesFeature {
     return L.join('\n');
   }
 
-  private async summarize(captions: Caption[], cites: string[], fallback: NotesDraft, savedNotes: { kind: NoteKind; text: string }[]): Promise<NotesDraft> {
+  private async summarize(captions: Caption[], cites: string[], fallback: NotesDraft, savedNotes: { kind: NoteKind; text: string }[], checks: string[] = []): Promise<NotesDraft> {
     const transcript = captions
       .slice(-120)
       .map((c) => `${c.speaker === 'student' ? 'Student' : 'Tutor'}: ${c.text}`)
@@ -211,6 +219,7 @@ export class NotesFeature {
                   'title: 3–7 words naming what was worked on. summary: 2–3 sentences. keyIdeas, definitions (term — meaning), mistakes (things they got wrong, kindly phrased), toReview (what to practise next), openQuestions (anything left unanswered). Leave lists empty rather than padding them.',
                   saved ? `Notes the tutor saved during the session:\n${saved}` : '',
                   cites.length ? `Course sources cited: ${cites.join('; ')}` : '',
+                  checks.length ? `Quick checks (the tutor asked them to point at the answer; ✓ right, ✗ missed):\n${checks.join('\n')}` : '',
                   `Transcript:\n${transcript}`,
                 ]
                   .filter(Boolean)

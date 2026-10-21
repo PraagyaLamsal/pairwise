@@ -43,21 +43,65 @@ export const TOOL_DECLARATIONS = [
     parameters: OBJ({ target: S('Specific description of what to point at.'), label: S('2–4 word label shown beside your cursor, e.g. "Run button".'), ...APPROX }, ['target']),
   },
   {
+    name: 'move_cursor',
+    description:
+      'Use your cursor as a pointer, the way a person does on a call — nothing is drawn and no label shows. style "hover": rest it on the thing you are talking about. "follow_line": glide under a line of code or text at reading pace while you read or explain it. "sweep": run down a list or block of lines, one line at a time. Use these often; they are lighter than drawing.',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        target: S('What to point at, follow or sweep, precisely: e.g. "line 4: return n * factorial(n - 1)" or "the four lines of the for loop".'),
+        style: E(['hover', 'follow_line', 'sweep'], 'How to move.'),
+        lines: I('For sweep: how many lines the block has (optional).'),
+        ...APPROX,
+      },
+      ['target', 'style'],
+    ),
+  },
+  {
     name: 'annotate',
-    description: 'Draw one to three hand-drawn marks on the student\'s screen while you talk: circle, underline, highlight, box, arrow, a short note, a step number, a check or a cross.',
+    description: 'Draw one to three marks on the student\'s screen while you talk: circle, underline, highlight, box, arrow, a short typed note, a step number, a check or a cross. Use ink sparingly — when a mark really helps; otherwise point or move_cursor.',
     behavior: 'NON_BLOCKING',
     parameters: OBJ({ items: ARR(ANNOTATION_ITEM, 'Marks to draw, in order.'), clear_previous: B('Erase your earlier marks first.') }, ['items']),
   },
   {
     name: 'explain_on_screen',
     description:
-      'For a visual explanation of what is on screen (walking through code, a slide, a diagram, an error): a vision model studies a full-resolution screenshot and returns a short script — lines to say, each with marks that appear exactly as you say it. When it arrives, say the lines in order, essentially word for word, then continue naturally. Say a few words while it prepares ("let me mark this up").',
+      'For a visual explanation of what is on screen (walking through code, a slide, a diagram, an error): a vision model studies a full-resolution screenshot and returns a short script — lines to say, each with cursor moves (following a line, sweeping a block) or marks that happen exactly as you say it. When it arrives, say the lines in order, essentially word for word, then continue naturally. Say a few words while it prepares ("let me walk you through it").',
     behavior: 'NON_BLOCKING',
     parameters: OBJ(
       {
         question: S('What the student needs explained, in their words plus any context.'),
         focus: S('Optional: the part of the screen to focus on, e.g. "the recursive call in fib()".'),
         lines: I('How many lines to plan, 2–6 (default 4).'),
+      },
+      ['question'],
+    ),
+  },
+  {
+    name: 'trace_code',
+    description:
+      'Step through code on the student\'s screen like a debugger: as you narrate, your cursor goes to each line as it runs and the values right after it appear beside that line ("n = 3", "returns 6"), updating in place when they change. Use it when they ask what code does or returns, what a variable is at some point, why it prints something, or how a loop or recursion unfolds. A model works the trace out from a full-resolution screenshot and returns the lines to say; say them in order, essentially word for word. Say a few words while it prepares ("let\'s trace it").',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        question: S('What the student wants to understand, in their words.'),
+        input: S('The input to trace with, e.g. "factorial(3)" or "nums = [4, 1, 3]" (optional; a small typical one is chosen otherwise).'),
+        focus: S('Optional: which code, e.g. "the factorial function on the left".'),
+        steps: I('Roughly how many steps to show, 3–10 (default 6).'),
+      },
+      ['question'],
+    ),
+  },
+  {
+    name: 'ask_to_point',
+    description:
+      'Check their understanding by asking them to show you something on their own screen: "click the line where the recursion stops", "point at the button that runs the tests". The app shows the question in one line and takes their next click (it does not reach the app underneath), marks it with a ring and returns where they clicked — and, if you say what the right answer is, whether they got it — plus a fresh frame. Say the question out loud too, don\'t point at the answer first, then wait for the result before reacting. One question at a time; they can press Esc to skip.',
+    behavior: 'NON_BLOCKING',
+    parameters: OBJ(
+      {
+        question: S('The question as shown on screen, short, e.g. "Click the line where the recursion stops".'),
+        answer: S('Optional: what on screen is the right answer, precisely, e.g. "line 2: if n == 0:" — the app checks their click against it.'),
+        display: I('1-based display number, only if the answer is on a display other than the one you are watching.'),
       },
       ['question'],
     ),

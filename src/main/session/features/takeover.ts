@@ -211,7 +211,8 @@ export class TakeoverFeature {
     this.s.ui.drivingLabel = undefined;
     this.s.pushUi();
     this.s.update({ driving: 'none' });
-    this.s.cursor.setDriving(false);
+    // Her cursor stays where she last drove to (the student's hand has moved on from there).
+    this.s.cursor.setDriving(false, this.tracker.lastMove ?? undefined);
     if (announce) log.info(`control released: ${why}`);
   }
 

@@ -14,6 +14,8 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private mic: MediaStream | null = null;
   private captureNode: AudioWorkletNode | null = null;
+  private micSource: MediaStreamAudioSourceNode | null = null;
+  private micConnected = false;
   private playbackNode: AudioWorkletNode | null = null;
   private outGain: GainNode | null = null;
   private muted = false;
@@ -26,6 +28,8 @@ export class AudioEngine {
   private speaking = false;
   private playing = false;
   private lastLevelSent = 0;
+  private lastLevel = -1;
+  private lastLevelSpeaking = false;
   private duckTimer: number | null = null;
   // replay
   private turnId = '';
@@ -53,10 +57,10 @@ export class AudioEngine {
         audio: { echoCancellation, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
         video: false,
       });
-      const src = this.ctx.createMediaStreamSource(this.mic);
+      this.micSource = this.ctx.createMediaStreamSource(this.mic);
       this.captureNode = new AudioWorkletNode(this.ctx, 'pw-capture', { numberOfInputs: 1, numberOfOutputs: 0 });
-      src.connect(this.captureNode);
       this.captureNode.port.onmessage = (e) => this.onMicChunk(e.data as { pcm: ArrayBuffer; rms: number });
+      this.routeMic();
       log('info', `audio started (${this.ctx.sampleRate} Hz, AEC ${echoCancellation ? 'on' : 'off'})`);
     } catch (e) {
       log('error', `microphone unavailable: ${(e as Error).message}`);
@@ -67,6 +71,8 @@ export class AudioEngine {
   stop(): void {
     this.mic?.getTracks().forEach((t) => t.stop());
     this.mic = null;
+    this.micSource = null;
+    this.micConnected = false;
     void this.ctx?.close();
     this.ctx = null;
     this.captureNode = null;
@@ -77,11 +83,35 @@ export class AudioEngine {
 
   setMuted(m: boolean): void {
     this.muted = m;
+    this.routeMic();
   }
 
   /** Push-to-talk gate: audio only flows while open. */
   setGate(open: boolean): void {
     this.gateOpen = open;
+    this.routeMic();
+  }
+
+  /**
+   * The mic is only processed while it's live: muted, or between hold-to-talk presses, it's
+   * disconnected from the capture worklet (the device stays open, so reopening is instant).
+   */
+  private routeMic(): void {
+    if (!this.micSource || !this.captureNode) return;
+    const want = !this.muted && this.gateOpen;
+    if (want === this.micConnected) return;
+    if (want) this.micSource.connect(this.captureNode);
+    else this.micSource.disconnect(this.captureNode);
+    this.micConnected = want;
+    if (!want) {
+      // Nothing more will arrive: settle the level and VAD now.
+      if (this.speaking) this.setSpeaking(false);
+      if (this.lastLevel !== 0) {
+        this.lastLevel = 0;
+        this.lastLevelSpeaking = false;
+        ipc.send('engine:micLevel', { level: 0, speaking: false });
+      }
+    }
   }
 
   setRate(rate: number): void {
@@ -169,9 +199,14 @@ export class AudioEngine {
 
     const now = performance.now();
     if (now - this.lastLevelSent > 50) {
-      this.lastLevelSent = now;
-      const level = live ? Math.min(1, Math.max(0, (20 * Math.log10(Math.max(rms, 1e-5)) + 58) / 46)) : 0;
-      ipc.send('engine:micLevel', { level, speaking: this.speaking });
+      const level = live ? Math.round(Math.min(1, Math.max(0, (20 * Math.log10(Math.max(rms, 1e-5)) + 58) / 46)) * 50) / 50 : 0;
+      // Only changes go out (muted, it's a single 0 rather than twenty a second).
+      if (level !== this.lastLevel || this.speaking !== this.lastLevelSpeaking) {
+        this.lastLevelSent = now;
+        this.lastLevel = level;
+        this.lastLevelSpeaking = this.speaking;
+        ipc.send('engine:micLevel', { level, speaking: this.speaking });
+      }
     }
     if (!live) return;
     this.seq += 1;

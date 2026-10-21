@@ -52,7 +52,8 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 export function Select<T extends string>({ value, options, onChange, width }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; width?: number }) {
   return (
     <span className="select" style={width ? { width } : undefined}>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+      {/* A set width wins over the default minimum (it used to overflow narrow ones). */}
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} style={width ? { minWidth: 0 } : undefined}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

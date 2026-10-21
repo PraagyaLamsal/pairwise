@@ -71,6 +71,18 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
     },
     turns: [
       {
+        heard: '(demo) can you walk me through this?',
+        segments: [
+          { say: 'Sure. Most of the time I just use my cursor, like someone sitting next to you.' },
+          { tool: 'move_cursor', args: { target: 'the block of lines in the middle', style: 'sweep', lines: 4, box: [360, 260, 600, 700] } },
+          { say: 'I run down a block of lines to show you its shape,' },
+          { tool: 'move_cursor', args: { target: 'one line in the middle', style: 'follow_line', box: [440, 260, 480, 700] } },
+          { say: 'follow one line while I read it with you,' },
+          { tool: 'move_cursor', args: { target: 'a spot on the right', style: 'hover', box: [520, 720, 560, 800] } },
+          { say: 'or just rest on the thing I mean. And when I stop, my cursor stays put and fades back, out of your way.' },
+        ],
+      },
+      {
         heard: '(demo) what can you draw?',
         segments: [
           { say: 'I mark things up while I explain them.' },
@@ -80,6 +92,13 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
           { say: 'arrows and little notes,' },
           { tool: 'annotate', args: { items: [{ kind: 'underline', target: 'a line of text', box: [520, 200, 560, 640] }, { kind: 'highlight', target: 'another line', box: [600, 200, 640, 560] }] } },
           { say: 'and underlines or highlights for the exact words.' },
+        ],
+      },
+      {
+        heard: '(demo) what does this code do?',
+        segments: [
+          { say: 'Let\'s trace it, one line at a time.' },
+          { tool: 'trace_code', args: { question: 'what does this code do?', input: 'factorial(3)' } },
         ],
       },
       {
@@ -99,6 +118,13 @@ export function demoScript(tutor: string): { greeting: MockTurn; turns: MockTurn
           { say: 'For how-to questions I go one step at a time, and I wait for you to do each one.' },
           { tool: 'guide_step', args: { step: 1, instruction: 'Click here', target: 'the middle of the screen', expect: 'click', label: 'click here', x: 500, y: 520 } },
           { say: 'Try it: click where I am pointing.' },
+        ],
+      },
+      {
+        heard: '(demo) quiz me',
+        segments: [
+          { say: 'Quick check. Click on the middle of your screen, as if it were the answer.' },
+          { tool: 'ask_to_point', args: { question: 'Click the middle of your screen', answer: 'the middle of your screen' } },
         ],
       },
       {
@@ -151,6 +177,22 @@ export class MockLiveServer {
     private readonly speed = 2,
   ) {
     this.script = demoScript(tutorName);
+    if (this.scripted) {
+      // Like the real model: say the script a walkthrough or trace hands back, line by line.
+      const sayScript = (r: Record<string, unknown>): MockTurn | null => (Array.isArray(r.script) && r.script.length ? { segments: r.script.map((say) => ({ say: String(say) })) } : null);
+      this.afterTool.set('explain_on_screen', sayScript);
+      this.afterTool.set('trace_code', sayScript);
+      // "Show me": react to where the student clicked.
+      this.afterTool.set('ask_to_point', (r) => ({
+        segments: !r.clicked
+          ? [{ say: 'No problem, we can come back to that one.' }]
+          : r.on_target === true
+            ? [{ say: 'Yes, exactly there!' }, { tool: 'celebrate', args: { message: 'nice!' } }]
+            : r.on_target === false
+              ? [{ say: 'Not quite. Look a little closer to the middle, and try again.' }]
+              : [{ say: 'Got it, I can see your click. In demo mode I can\'t check what is there, but with a key I\'d tell you if that was right.' }],
+      }));
+    }
   }
 
   async start(port = 0): Promise<string> {
@@ -162,8 +204,10 @@ export class MockLiveServer {
   }
 
   async stop(): Promise<void> {
+    // Stop accepting first, so a client that reconnects at once finds nobody there.
+    const closed = new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()));
     for (const c of this.conns) c.ws.close(1001, 'server stopping');
-    await new Promise<void>((r) => (this.wss ? this.wss.close(() => r()) : r()));
+    await closed;
     this.wss = null;
   }
 

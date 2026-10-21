@@ -22,6 +22,10 @@ const SECTIONS: { id: Section; label: string }[] = [
 export function SettingsPage() {
   const [s, update] = useSettings();
   const [section, setSection] = useState<Section>('tutor');
+  // A saved key this build can't read: start where it can be pasted again.
+  useEffect(() => {
+    void ipc.invoke('secrets:status').then((k) => k.unreadable && setSection('models'));
+  }, []);
   if (!s) return null;
   return (
     <div className="page">
@@ -81,6 +85,17 @@ function TutorSection({ s, update }: SectionProps) {
             onChange={(explanationDepth) => void update({ explanationDepth })}
           />
         </Row>
+        <Row title="Quick checks" help={`Now and then ${s.tutorName} asks you to click the answer on your screen ("show me where the loop ends"), to check you've got it.`}>
+          <Segmented
+            value={s.quickChecks}
+            options={[
+              { value: 'often', label: 'Often' },
+              { value: 'sometimes', label: 'Sometimes' },
+              { value: 'off', label: 'Off' },
+            ]}
+            onChange={(quickChecks) => void update({ quickChecks })}
+          />
+        </Row>
       </Group>
       <Group title="Conversation">
         <Row title="Talk mode" help="Hands-free listens all the time and lets you interrupt. Hold-to-talk only listens while you hold the ask keys.">
@@ -122,6 +137,9 @@ function TutorSection({ s, update }: SectionProps) {
         <Row title="Include the transcript">
           <Toggle checked={s.notes.includeTranscript} onChange={(includeTranscript) => void update({ notes: { includeTranscript } })} />
         </Row>
+        <Row title="Tell me when they're saved" help="A notification when the notes are ready, a moment after the session ends. Click it to open them.">
+          <Toggle checked={s.notes.notify} onChange={(notify) => void update({ notes: { notify } })} />
+        </Row>
       </Group>
     </>
   );
@@ -137,14 +155,14 @@ function LookSection({ s, update }: SectionProps) {
         <Row title="Your ink color" help="What you draw while asking.">
           <input className="color-input" type="color" value={s.studentInkColor} onChange={(e) => void update({ studentInkColor: e.target.value })} />
         </Row>
-        <Row title="Between explanations" help="Follow keeps the cursor beside yours. Stay leaves it where it last pointed.">
+        <Row title={`${s.tutorName} writes notes`} help="Typed in the system font, like Tuple's text tool — or in handwriting.">
           <Segmented
-            value={s.cursorBehavior}
+            value={s.noteStyle}
             options={[
-              { value: 'follow', label: 'Follow me' },
-              { value: 'stay', label: 'Stay put' },
+              { value: 'typed', label: 'Typed (like Tuple)' },
+              { value: 'handwritten', label: 'Handwritten' },
             ]}
-            onChange={(cursorBehavior) => void update({ cursorBehavior })}
+            onChange={(noteStyle) => void update({ noteStyle })}
           />
         </Row>
       </Group>
@@ -166,6 +184,9 @@ function LookSection({ s, update }: SectionProps) {
               width={110}
             />
           )}
+        </Row>
+        <Row title="Keep drawings with what they mark" help="Scroll and they move with the page; switch to another app and they hide until you're back.">
+          <Toggle checked={s.stickyInk} onChange={(stickyInk) => void update({ stickyInk })} />
         </Row>
         <Row title="Preview" help="Draws a short demo of the cursor and annotations on your screen.">
           <Button size="s" icon="sparkle" onClick={() => void ipc.invoke('diagnostics:previewInk')}>
@@ -375,7 +396,10 @@ function ModelsSection({ s, update }: SectionProps) {
   return (
     <>
       <Group title="API key">
-        <Row title={status?.hasKey ? `Connected (${status.preview})` : 'No key — the demo tutor is used'} help={status?.source === 'env' ? 'Using GEMINI_API_KEY from the environment.' : 'Stored encrypted in your keychain.'}>
+        <Row
+          title={status?.hasKey ? `Connected (${status.preview})` : status?.unreadable ? 'Saved key can\'t be read by this copy of Pairwise' : 'No key — the demo tutor is used'}
+          help={status?.unreadable ? 'It was saved by another build (for example npm run dev). Paste it again below; until then the demo tutor is used.' : status?.source === 'env' ? 'Using GEMINI_API_KEY from the environment.' : 'Stored encrypted in your keychain.'}
+        >
           {status?.source === 'keychain' && (
             <Button size="s" variant="ghost" onClick={() => void ipc.invoke('secrets:clearApiKey').then(setStatus)}>
               Remove

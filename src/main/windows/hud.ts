@@ -3,7 +3,7 @@ import type { DisplayInfo } from '@shared/geometry';
 import { createWindow, loadPage, safeDestroy } from './registry';
 import { env } from '../env';
 
-const DEFAULT_SIZE = { width: 640, height: 60 };
+const DEFAULT_SIZE = { width: 300, height: 50 };
 
 /** The floating session bar (timer, mic, captions, controls). Sized to its content by the renderer. */
 export class HudWindow {
@@ -24,7 +24,7 @@ export class HudWindow {
     const { display, saved } = this.placement();
     const pos = saved ?? {
       x: Math.round(display.workArea.x + (display.workArea.width - this.size.width) / 2),
-      y: Math.round(display.workArea.y + 12),
+      y: Math.round(display.workArea.y + 8),
     };
     this.win = createWindow('hud', {
       x: pos.x,

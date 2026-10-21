@@ -153,11 +153,14 @@ describe('OCR matching', () => {
     expect(hits[0].exact).toBe(false);
     expect(hits[0].x2).toBeCloseTo(50 + (130 * 9) / 13, 5);
   });
-  it('matches multi-word terms only within one line', () => {
-    const words = [w('Save', 10, 10, 'a'), w('as', 60, 10, 'b')];
-    expect(matchWords(words, 'the "Save as" item')).toHaveLength(0);
-    const same = [w('Save', 10, 10, 'a'), w('as', 60, 10, 'a')];
-    expect(matchWords(same, 'the "Save as" item')).toHaveLength(1);
+  it('matches multi-word terms only within one row of text', () => {
+    // Different rows (or a column far off to the side) are not one phrase.
+    expect(matchWords([w('Save', 10, 10, 'a'), w('as', 60, 40, 'b')], 'the "Save as" item')).toHaveLength(0);
+    expect(matchWords([w('Save', 10, 10, 'a'), w('as', 160, 10, 'b')], 'the "Save as" item')).toHaveLength(0);
+    expect(matchWords([w('Save', 10, 10, 'a'), w('as', 60, 10, 'a')], 'the "Save as" item')).toHaveLength(1);
+    // Tesseract puts low-confidence symbols on lines of their own; side by side, it's one row.
+    const code = [w('if', 10, 10, 'a'), w('n', 40, 10, 'a'), w('==', 62, 12, 'b', 20), w('0:', 92, 10, 'b', 18)];
+    expect(matchWords(code, 'the line "if n == 0:"')).toHaveLength(1);
   });
 });
 

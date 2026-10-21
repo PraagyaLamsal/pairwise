@@ -117,7 +117,10 @@ export function runTesseract(image: Uint8Array, mime: string, extra: string[] = 
   const file = join(dir, mime === 'image/png' ? 'f.png' : 'f.jpg');
   writeFileSync(file, image);
   return new Promise((resolve) => {
-    execFile('tesseract', [file, 'stdout', '--psm', '11', ...extra, 'tsv'], { timeout: 15_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    // Several passes run at once; tesseract's OpenMP threads then fight over the cores and a
+    // pass that takes 0.25 s alone can stall for 30 s+ (seen on a 4-core machine). One thread each.
+    const opts = { timeout: 15_000, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, OMP_THREAD_LIMIT: '1' } };
+    execFile('tesseract', [file, 'stdout', '--psm', '11', ...extra, 'tsv'], opts, (err, stdout) => {
       rmSync(dir, { recursive: true, force: true });
       if (err) return resolve([]);
       const words: OcrWord[] = [];
@@ -240,14 +243,18 @@ export function mergeHits(hits: WordHit[]): WordHit[] {
 }
 
 /** All runs of OCR words that spell a search term of the description. */
-export function matchWords(words: OcrWord[], description: string): WordHit[] {
+export function matchWords(all: OcrWord[], description: string): WordHit[] {
   const hits: WordHit[] = [];
+  // Bare symbols ("==", "*", "->") are dropped from search terms, so skip them in the text too
+  // (but they still count when checking the words sit together in one row).
+  const at = new Map(all.map((w, i) => [w, i]));
+  const words = all.filter((w) => ocrNorm(w.text));
   for (const term of searchTerms(description)) {
     const parts = term.split(/\s+/).map(ocrNorm).filter(Boolean);
     if (!parts.length) continue;
     for (let i = 0; i < words.length; i++) {
       const run = words.slice(i, i + parts.length);
-      if (run.length !== parts.length || new Set(run.map((w) => w.line)).size > 1) continue;
+      if (run.length !== parts.length || !oneRow(all.slice(at.get(run[0])!, at.get(run[run.length - 1])! + 1))) continue;
       let exact = true;
       const ok = run.every((w, k) => {
         const t = ocrNorm(w.text);
@@ -278,6 +285,20 @@ export function matchWords(words: OcrWord[], description: string): WordHit[] {
     if (hits.length) break; // the first term that appears at all wins (quoted text first)
   }
   return hits;
+}
+
+/**
+ * Whether words read in order form one row of text: Tesseract's own line, or words it put on
+ * separate lines (it does that to low-confidence symbols like "==") that sit side by side.
+ */
+function oneRow(run: OcrWord[]): boolean {
+  if (new Set(run.map((w) => w.line)).size === 1) return true;
+  return run.every((w, k) => {
+    if (k === 0) return true;
+    const a = run[k - 1];
+    const h = Math.max(a.h, w.h);
+    return Math.abs(a.y + a.h / 2 - (w.y + w.h / 2)) < h * 0.5 && w.x > a.x && w.x - (a.x + a.w) < h * 3;
+  });
 }
 
 /** Default size of a box synthesized around an approximate point (DIP). */

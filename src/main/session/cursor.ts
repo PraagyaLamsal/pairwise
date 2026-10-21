@@ -1,29 +1,40 @@
 import { EventEmitter } from 'node:events';
 import { clampPointInside, displayForPoint, distance, type Point } from '@shared/geometry';
-import type { CursorActivity, CursorCancel, CursorFlight, CursorFrame, CursorTrace, InkItem } from '@shared/ink';
-import { easeInOut, inkPenPoint } from '@shared/ink-geometry';
+import type { CursorActivity, CursorCancel, CursorFlight, CursorFrame, CursorPresence, CursorTrace, InkItem } from '@shared/ink';
+import { flightPoint, glidePoint, inkPenPoint, penStateAt } from '@shared/ink-geometry';
 import type { DisplayService, InputHooks } from '../platform/types';
 
 /**
- * Where the buddy sits relative to the student's pointer while following (DIP). Clicky (MIT)
- * uses (+35, +25): close enough to feel attached, far enough not to cover what you click.
+ * Where the cursor first appears, relative to the student's pointer (DIP): close enough to read
+ * as "Ada joined", far enough not to sit on what they're about to click.
  */
-export const FOLLOW_OFFSET = { x: 30, y: 24 };
-const TICK_MS = 1000 / 120;
+export const ARRIVE_OFFSET = { x: 44, y: 34 };
+/** After this long without moving (and no label to show), the cursor dims. */
+export const IDLE_AFTER_MS = 1200;
+/** The student's pointer this close to the cursor fades it further (enter / leave, DIP). */
+export const NEAR_PX = 60;
+const NEAR_LEAVE_PX = 84;
+/** How long the name label shows when the session starts (Tuple shows names on join). */
+const JOIN_LABEL_MS = 2600;
+/** Driving: the cursor rides the real pointer, so frames go out at 60 Hz. */
+const TICK_MS = 1000 / 60;
+/** Otherwise overlays animate moves themselves; 30 Hz is plenty for presence and the pointer. */
+const IDLE_TICK_MS = 1000 / 30;
 const SEND_EVERY_MS = 1000 / 60;
-/** Spring tuned like a lively UI spring: response ≈0.22 s, damping ratio ≈0.62. */
-const OMEGA = (2 * Math.PI) / 0.22;
-const ZETA = 0.62;
 
-export type CursorMode = 'hidden' | 'follow' | 'timeline' | 'parked' | 'driving';
+export type CursorMode = 'hidden' | 'parked' | 'timeline' | 'driving';
 
-/** Quadratic-bezier flight like a swooping pointer: arc height ∝ distance, smoothstep easing. */
-export function planFlight(from: Point, to: Point, startAt: number, label?: string, maxMs = 1200): CursorFlight {
+/**
+ * A cursor flight: a gently curved path (a hand moving a mouse rarely goes dead straight), eased
+ * with a minimum-jerk profile (see flightPoint). Long moves take longer, within limits.
+ */
+export function planFlight(from: Point, to: Point, startAt: number, label?: string, maxMs = 1200, reducedMotion = false): CursorFlight {
   const d = distance(from, to);
-  const duration = Math.round(Math.min(Math.max(d / 900, d < 60 ? 0.22 : 0.42), maxMs / 1000) * 1000);
+  // Reduce motion: a short, straight move rather than a swoop (it still shows where she went).
+  const duration = reducedMotion ? Math.round(Math.min(d / 2400 + 0.12, 0.26, maxMs / 1000) * 1000) : Math.round(Math.min(Math.max(d / 900, d < 60 ? 0.24 : 0.44), maxMs / 1000) * 1000);
   const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-  const arc = Math.min(d * 0.2, 90);
-  // Arc "upward" relative to travel direction (perpendicular, biased to screen-up).
+  const arc = reducedMotion ? 0 : Math.min(d * 0.1, 46);
+  // Curve "upward" relative to the direction of travel (perpendicular, biased to screen-up).
   const nx = -(to.y - from.y) / (d || 1);
   const ny = (to.x - from.x) / (d || 1);
   const sign = ny > 0 ? -1 : 1;
@@ -31,35 +42,31 @@ export function planFlight(from: Point, to: Point, startAt: number, label?: stri
   return { from, ctrl, to, startAt, duration, label };
 }
 
-export function flightPoint(f: CursorFlight, now: number): { p: Point; t: number; rot: number; done: boolean } {
-  const lin = Math.min(1, Math.max(0, (now - f.startAt) / f.duration));
-  const t = lin * lin * (3 - 2 * lin);
-  const u = 1 - t;
-  const p = {
-    x: u * u * f.from.x + 2 * u * t * f.ctrl.x + t * t * f.to.x,
-    y: u * u * f.from.y + 2 * u * t * f.ctrl.y + t * t * f.to.y,
-  };
-  const tx = 2 * u * (f.ctrl.x - f.from.x) + 2 * t * (f.to.x - f.ctrl.x);
-  const ty = 2 * u * (f.ctrl.y - f.from.y) + 2 * t * (f.to.y - f.ctrl.y);
-  const rot = (Math.atan2(ty, tx) * 180) / Math.PI + 90;
-  return { p, t: lin, rot, done: lin >= 1 };
-}
+export { flightPoint };
 
 type Segment =
   | { kind: 'flight'; startAt: number; endAt: number; flight: CursorFlight }
-  | { kind: 'trace'; startAt: number; endAt: number; trace: CursorTrace; item: InkItem }
+  | { kind: 'trace'; startAt: number; endAt: number; trace: CursorTrace; item?: InkItem }
   | { kind: 'hold'; startAt: number; endAt: number; at: Point };
 
 /** One scheduled move for `schedule()`. Times are filled in by the engine. */
 export type CursorStep =
   | { kind: 'fly'; to: Point; label?: string; maxMs?: number }
   | { kind: 'trace'; item: InkItem }
+  /** A pointer-only gesture: the cursor glides along `path` (no ink), see glidePoint(). */
+  | { kind: 'glide'; path: Point[]; ms: number; style: NonNullable<CursorTrace['style']> }
   | { kind: 'hold'; ms: number };
 
 /**
- * The tutor's cursor. Physics runs here (one source of truth for every display) and frames are
- * broadcast at 60 Hz while following; flights and traces are scheduled on the shared wall clock
- * and animated by the overlays themselves, so motion stays smooth and in sync on every monitor.
+ * The tutor's cursor. It stays where she leaves it, like a person's cursor on a pairing call:
+ * it never follows the student's pointer and never flies "home". When it isn't moving it dims
+ * (and dims further when the student's pointer comes close) so it never sits on top of their
+ * work; it comes back to full strength the moment it moves.
+ *
+ * Physics runs here (one source of truth for every display); flights, traces and gestures are
+ * scheduled on the shared wall clock and animated by the overlays themselves, so motion stays
+ * smooth and in sync on every monitor. Frames (position, presence, label, the student's
+ * pointer) go out whenever something changes, at most 60 Hz.
  *
  * Emits: 'frame' (CursorFrame) · 'flight' (CursorFlight) · 'trace' (CursorTrace) ·
  *        'cancel' (CursorCancel) · 'landed' (Point) · 'idle' (timeline finished)
@@ -67,7 +74,6 @@ export type CursorStep =
 export class CursorEngine extends EventEmitter {
   private mode: CursorMode = 'hidden';
   private pos: Point = { x: 0, y: 0 };
-  private vel: Point = { x: 0, y: 0 };
   private rot = -35;
   private mouse: Point = { x: 0, y: 0 };
   private segments: Segment[] = [];
@@ -79,30 +85,39 @@ export class CursorEngine extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
   private lastSent = 0;
   private lastFrameKey = '';
-  private parkedSince = 0;
-  private returnAfterMs: number | null = null;
-  private mouseAtPark: Point = { x: 0, y: 0 };
+  /** Until when the cursor counts as active after landing (its label is on show). */
+  private activeUntil = 0;
+  private holdAfterMs = 0;
+  private near = false;
+  private presenceNow: CursorPresence = 'active';
   private pendingLabel: string | null = null;
-  /** While the tutor is talking, parking doesn't time out (it may still refer to the spot). */
+  /** While the tutor is talking, a pointing label stays up (she may still be referring to it). */
   holdWhile: () => boolean = () => false;
 
   constructor(
     private readonly displays: DisplayService,
     private readonly hooks: InputHooks,
-    private readonly opts: { name: () => string; behavior: () => 'follow' | 'stay' },
+    /** `pointerMatters`: whether the student's pointer is near anything the overlays fade for it (cards, chips). */
+    private readonly opts: { name: () => string; pointerMatters?: (p: Point) => boolean; reducedMotion?: () => boolean },
   ) {
     super();
   }
 
   get position(): Point {
-    return { ...this.pos };
+    // Exact between ticks while a move is under way.
+    return this.mode === 'timeline' ? this.positionAt(Date.now()) : { ...this.pos };
   }
 
   get currentMode(): CursorMode {
     return this.mode;
   }
 
-  /** When the scheduled timeline (flights + traces) ends; now if nothing is scheduled. */
+  /** active (moving or showing a label) · idle (dimmed) · near (the student's pointer is close). */
+  get presence(): CursorPresence {
+    return this.presenceNow;
+  }
+
+  /** When the scheduled timeline (flights + traces) ends; 0 if nothing is scheduled. */
   get busyUntil(): number {
     const last = this.segments[this.segments.length - 1];
     return last ? last.endAt : 0;
@@ -113,26 +128,38 @@ export class CursorEngine extends EventEmitter {
     if (!this.segments.length) return { ...this.pos };
     let p = this.pos;
     for (const s of this.segments) {
-      if (t < s.startAt) return this.segStart(s, p);
-      p = this.segPoint(s, Math.min(t, s.endAt));
+      // Before a segment starts the cursor waits where the previous one left it.
+      if (t < s.startAt) return { ...p };
+      if (t <= s.endAt) return this.segPoint(s, t);
+      p = this.segPoint(s, s.endAt);
     }
-    return p;
+    return { ...p };
   }
 
+  /** Appear beside the student's pointer, say hello with the name label, then stay there. */
   start(): void {
     this.mouse = this.displays.cursor();
-    this.pos = { x: this.mouse.x + FOLLOW_OFFSET.x, y: this.mouse.y + FOLLOW_OFFSET.y };
-    this.vel = { x: 0, y: 0 };
+    this.pos = this.arrivalPoint(this.mouse);
     this.segments = [];
-    this.mode = 'follow';
-    this.label = this.opts.name();
-    this.labelKind = 'name';
-    if (!this.timer) this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.mode = 'parked';
+    this.rot = -35;
+    this.near = false;
+    this.setLabel(this.opts.name(), 'name');
+    this.activeUntil = Date.now() + JOIN_LABEL_MS;
+    this.presenceNow = 'active';
+    if (!this.timer) this.loop();
     this.send(true);
   }
 
+  private loop(): void {
+    this.timer = setTimeout(() => {
+      this.tick();
+      if (this.timer) this.loop();
+    }, this.mode === 'driving' ? TICK_MS : IDLE_TICK_MS);
+  }
+
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.segments = [];
     this.mode = 'hidden';
@@ -142,8 +169,11 @@ export class CursorEngine extends EventEmitter {
   setActivity(activity: CursorActivity, label?: string): void {
     if (activity === this.activity && label === undefined) return;
     this.activity = activity;
-    if (label !== undefined) this.setLabel(label, 'status');
-    else if (this.mode !== 'parked' && this.mode !== 'timeline' && this.labelKind !== 'name') this.setLabel(this.opts.name(), 'name');
+    if (label !== undefined) {
+      this.setLabel(label, 'status');
+      // A status ("reading…") is worth seeing: show it where the cursor is.
+      this.activeUntil = Math.max(this.activeUntil, Date.now() + IDLE_AFTER_MS);
+    } else if (this.mode !== 'timeline' && this.labelKind === 'status') this.setLabel('', 'name');
     this.send(true);
   }
 
@@ -158,11 +188,21 @@ export class CursorEngine extends EventEmitter {
     this.labelSeq += 1;
   }
 
+  /** End a hold early (a guided step was done): dim after the usual short pause. */
+  relax(): void {
+    if (this.mode !== 'parked') return;
+    this.activeUntil = Math.min(this.activeUntil, Date.now() + IDLE_AFTER_MS);
+    this.holdAfterMs = 0;
+    if (this.labelKind === 'pointing') this.setLabel('', 'name');
+  }
+
   /**
-   * Schedule a choreography: fly → trace an ink item → fly → … Starts at `startAt` (or when the
-   * current timeline ends, whichever is later). Returns the absolute times of each step.
+   * Schedule a choreography: fly → trace an ink item → glide → … Starts at `startAt` (or when the
+   * current timeline ends, whichever is later). After the last step the cursor stays where it
+   * is; `finalLabel` shows there for `holdAfterMs` (longer while the tutor keeps talking).
+   * Returns the absolute times of each step.
    */
-  schedule(steps: CursorStep[], startAt = Date.now(), finalLabel?: string, holdAfterMs = 3200): { startAt: number; endAt: number }[] {
+  schedule(steps: CursorStep[], startAt = Date.now(), finalLabel?: string, holdAfterMs = 2600): { startAt: number; endAt: number }[] {
     if (this.mode === 'hidden' || this.mode === 'driving') return steps.map(() => ({ startAt, endAt: startAt }));
     const now = Date.now();
     let t = Math.max(startAt, now, this.busyUntil);
@@ -172,7 +212,7 @@ export class CursorEngine extends EventEmitter {
       if (step.kind === 'fly') {
         const display = displayForPoint(this.displays.list(), step.to);
         const to = display ? clampPointInside(step.to, display.bounds) : step.to;
-        const flight = planFlight(from, to, t, step.label, step.maxMs);
+        const flight = planFlight(from, to, t, step.label, step.maxMs, this.opts.reducedMotion?.() ?? false);
         const seg: Segment = { kind: 'flight', startAt: t, endAt: t + flight.duration, flight };
         this.segments.push(seg);
         this.emit('flight', flight);
@@ -189,6 +229,19 @@ export class CursorEngine extends EventEmitter {
         times.push({ startAt: seg.startAt, endAt: seg.endAt });
         t = seg.endAt;
         from = end;
+      } else if (step.kind === 'glide') {
+        if (step.path.length < 2) {
+          times.push({ startAt: t, endAt: t }); // keep times aligned with steps
+          continue;
+        }
+        const end = step.path[step.path.length - 1];
+        const trace: CursorTrace = { path: step.path.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })), style: step.style, startAt: t, duration: Math.max(1, Math.round(step.ms)), end };
+        const seg: Segment = { kind: 'trace', startAt: t, endAt: t + trace.duration, trace };
+        this.segments.push(seg);
+        this.emit('trace', trace);
+        times.push({ startAt: seg.startAt, endAt: seg.endAt });
+        t = seg.endAt;
+        from = end;
       } else {
         const seg: Segment = { kind: 'hold', startAt: t, endAt: t + step.ms, at: from };
         this.segments.push(seg);
@@ -197,11 +250,11 @@ export class CursorEngine extends EventEmitter {
       }
     }
     this.mode = 'timeline';
-    // A new choreography replaces a flight home that was under way: land and park, don't follow.
-    this.returning = false;
     this.pendingLabel = finalLabel ?? null;
-    this.returnAfterMs = holdAfterMs;
-    if (finalLabel === undefined && this.labelKind !== 'name') this.setLabel(this.opts.name(), 'name');
+    this.holdAfterMs = finalLabel ? holdAfterMs : 0;
+    // Labels show where they mean something (a pointing label on landing); never while moving.
+    if (this.labelKind !== 'name' || this.label) this.setLabel('', 'name');
+    this.presenceNow = 'active';
     this.send(true);
     return times;
   }
@@ -209,7 +262,7 @@ export class CursorEngine extends EventEmitter {
   /** Swoop to a global point now (or after what's scheduled). Resolves when the cursor lands. */
   flyTo(target: Point, label?: string, opts: { holdMs?: number } = {}): Promise<void> {
     if (this.mode === 'hidden' || this.mode === 'driving') return Promise.resolve();
-    const [t] = this.schedule([{ kind: 'fly', to: target, label }], Date.now(), label, opts.holdMs ?? 3200);
+    const [t] = this.schedule([{ kind: 'fly', to: target, label }], Date.now(), label, opts.holdMs ?? 2600);
     return new Promise((resolve) => setTimeout(resolve, Math.max(0, t.endAt - Date.now()) + 10));
   }
 
@@ -220,139 +273,133 @@ export class CursorEngine extends EventEmitter {
     const last = this.segments[this.segments.length - 1];
     if (last && last.kind === 'flight' && last.endAt > now) {
       // Re-aim the flight in progress: start a short flight from where it is now.
-      this.cancelFuture(now, false);
+      this.cancelFuture(now);
     }
     const from = this.positionAt(now);
     if (distance(from, target) < 2) return;
     this.schedule([{ kind: 'fly', to: target, label, maxMs: 420 }], now, label ?? this.pendingLabel ?? undefined);
   }
 
+  /**
+   * What she's pointing at moved (the student scrolled): drop what's left of the current moves
+   * and glide along with it. The next beat's moves start from there.
+   */
+  follow(dx: number, dy: number): void {
+    if (this.mode === 'hidden' || this.mode === 'driving') return;
+    const now = Date.now();
+    const p = this.positionAt(now);
+    if (this.segments.length) this.cancelFuture(now);
+    this.schedule([{ kind: 'fly', to: { x: p.x + dx, y: p.y + dy }, maxMs: 200 }], now);
+  }
+
   /** Drop everything scheduled after `now` (interruption). Ink the overlays already drew stays. */
-  cancelFuture(now = Date.now(), returnHome = true): void {
+  cancelFuture(now = Date.now()): void {
     if (!this.segments.length) return;
     const p = this.positionAt(now);
     this.segments = [];
     this.pos = p;
     const msg: CursorCancel = { at: now, pos: p };
     this.emit('cancel', msg);
-    this.returning = false;
-    if (this.mode === 'timeline') {
-      this.mode = 'parked';
-      this.parkedSince = now;
-      this.mouseAtPark = { ...this.mouse };
-    }
-    if (returnHome) this.returnAfterMs = 600;
+    if (this.mode === 'timeline') this.land(now, false);
     this.send(true);
   }
 
-  /** Fly back to the student's pointer and resume following. */
-  returnToStudent(): void {
-    if (this.mode === 'hidden' || this.mode === 'follow' || this.mode === 'driving') return;
-    if (this.opts.behavior() === 'stay') {
-      this.setLabel(this.opts.name(), 'name');
-      this.send(true);
-      return;
-    }
-    this.segments = [];
-    const target = { x: this.mouse.x + FOLLOW_OFFSET.x, y: this.mouse.y + FOLLOW_OFFSET.y };
-    this.setLabel(this.opts.name(), 'name');
-    const flight = planFlight(this.pos, target, Date.now());
-    this.segments.push({ kind: 'flight', startAt: flight.startAt, endAt: flight.startAt + flight.duration, flight });
-    this.emit('flight', flight);
-    this.mode = 'timeline';
-    this.pendingLabel = null;
-    this.returnAfterMs = null;
-    this.returning = true;
-    this.send(true);
-  }
-
-  private returning = false;
-
-  /** Takeover: the buddy rides on the real pointer. */
-  setDriving(on: boolean): void {
+  /** Takeover: the cursor rides the real pointer; afterwards it stays where it last drove to. */
+  setDriving(on: boolean, parkAt?: Point): void {
     if (on) {
-      this.cancelFuture(Date.now(), false);
+      this.cancelFuture(Date.now());
       this.mode = 'driving';
       this.activity = 'driving';
       this.setLabel(`${this.opts.name()} is driving`, 'status');
     } else if (this.mode === 'driving') {
-      this.mode = 'follow';
+      this.mode = 'parked';
       this.activity = 'idle';
-      this.setLabel(this.opts.name(), 'name');
+      if (parkAt) this.pos = { ...parkAt };
+      this.setLabel('', 'name');
+      this.activeUntil = Date.now() + IDLE_AFTER_MS;
     }
     this.send(true);
   }
 
-  private segStart(s: Segment, fallback: Point): Point {
-    if (s.kind === 'flight') return s.flight.from;
-    if (s.kind === 'hold') return s.at;
-    return inkPenPoint(s.item, 0) ?? fallback;
+  private arrivalPoint(mouse: Point): Point {
+    const display = displayForPoint(this.displays.list(), mouse) ?? this.displays.list()[0];
+    const p = { x: mouse.x + ARRIVE_OFFSET.x, y: mouse.y + ARRIVE_OFFSET.y };
+    if (!display) return p;
+    // Keep the whole cursor (and its label) on screen: flip to the other side near an edge.
+    const b = display.bounds;
+    if (p.x > b.x + b.width - 90) p.x = mouse.x - ARRIVE_OFFSET.x - 20;
+    if (p.y > b.y + b.height - 50) p.y = mouse.y - ARRIVE_OFFSET.y - 20;
+    return clampPointInside(p, { x: b.x + 4, y: b.y + 4, width: b.width - 8, height: b.height - 8 });
   }
 
   private segPoint(s: Segment, t: number): Point {
     if (s.kind === 'flight') return flightPoint(s.flight, t).p;
     if (s.kind === 'hold') return s.at;
-    const raw = Math.min(1, Math.max(0, (t - s.startAt) / Math.max(1, s.endAt - s.startAt)));
-    return inkPenPoint(s.item, easeInOut(raw)) ?? s.trace.end;
+    const ms = Math.min(s.endAt, Math.max(s.startAt, t)) - s.startAt;
+    if (s.trace.path) return glidePoint(s.trace.path, ms / Math.max(1, s.endAt - s.startAt), s.trace.style ?? 'glide');
+    return (s.item && penStateAt(s.item, ms).pen) ?? s.trace.end;
+  }
+
+  /** The timeline ran out (or was cut short): stay right here. */
+  private land(now: number, finished: boolean): void {
+    this.segments = [];
+    this.mode = 'parked';
+    if (this.pendingLabel) this.setLabel(this.pendingLabel, 'pointing');
+    else if (this.label) this.setLabel('', 'name');
+    this.pendingLabel = null;
+    this.activeUntil = now + Math.max(IDLE_AFTER_MS, this.holdAfterMs);
+    if (finished) {
+      this.emit('landed', this.pos);
+      this.emit('idle');
+    }
+  }
+
+  private computePresence(now: number): CursorPresence {
+    if (this.mode === 'driving' || this.mode === 'timeline') return 'active';
+    // The student's pointer next to the cursor: get out of the way (with a little hysteresis).
+    const centre = { x: this.pos.x + 9, y: this.pos.y + 11 };
+    const d = distance(this.mouse, centre);
+    this.near = this.near ? d < NEAR_LEAVE_PX : d < NEAR_PX;
+    if (this.near) return 'near';
+    if (now < this.activeUntil) return 'active';
+    // Still talking about what it points at: keep the label up a little longer.
+    if (this.labelKind === 'pointing' && this.holdAfterMs > 0 && this.holdWhile()) {
+      this.activeUntil = now + IDLE_AFTER_MS;
+      return 'active';
+    }
+    return 'idle';
   }
 
   private tick(): void {
     const now = Date.now();
     // Polling the pointer is cheap and works the same with or without global input hooks.
     this.mouse = this.displays.cursor();
-    const dt = TICK_MS / 1000;
 
-    if (this.mode === 'follow' || this.mode === 'driving') {
-      const target = this.mode === 'driving' ? { x: this.mouse.x, y: this.mouse.y } : { x: this.mouse.x + FOLLOW_OFFSET.x, y: this.mouse.y + FOLLOW_OFFSET.y };
-      if (this.mode === 'driving') {
-        this.pos = target;
-        this.vel = { x: 0, y: 0 };
-      } else {
-        const ax = OMEGA * OMEGA * (target.x - this.pos.x) - 2 * ZETA * OMEGA * this.vel.x;
-        const ay = OMEGA * OMEGA * (target.y - this.pos.y) - 2 * ZETA * OMEGA * this.vel.y;
-        this.vel.x += ax * dt;
-        this.vel.y += ay * dt;
-        this.pos.x += this.vel.x * dt;
-        this.pos.y += this.vel.y * dt;
-      }
+    if (this.mode === 'driving') {
+      this.pos = { x: this.mouse.x, y: this.mouse.y };
       this.rot = -35;
     } else if (this.mode === 'timeline') {
       const last = this.segments[this.segments.length - 1];
       this.pos = this.positionAt(now);
       if (!last || now >= last.endAt) {
-        this.segments = [];
-        if (this.returning) {
-          this.returning = false;
-          this.mode = 'follow';
-          this.vel = { x: 0, y: 0 };
-          this.emit('idle');
-          this.send(true);
-        } else {
-          this.mode = 'parked';
-          this.parkedSince = now;
-          this.mouseAtPark = { ...this.mouse };
-          if (this.pendingLabel) this.setLabel(this.pendingLabel, 'pointing');
-          this.pendingLabel = null;
-          this.emit('landed', this.pos);
-          this.emit('idle');
-          this.send(true);
-        }
+        this.land(now, true);
+        this.presenceNow = this.computePresence(now);
+        this.send(true);
+        return;
       }
-      return; // overlays animate scheduled motion themselves
-    } else if (this.mode === 'parked') {
-      // Come back to the student: they moved the mouse a lot, or the hold time ran out.
-      const moved = distance(this.mouse, this.mouseAtPark);
-      const held = now - this.parkedSince;
-      const hold = this.holdWhile();
-      if (this.opts.behavior() === 'follow' && ((moved > 220 && held > 1200) || (!hold && this.returnAfterMs !== null && held > this.returnAfterMs))) {
-        this.returnAfterMs = null;
-        this.returnToStudent();
-      }
+    }
+    const presence = this.computePresence(now);
+    if (presence !== this.presenceNow) {
+      this.presenceNow = presence;
+      // The label goes with the dim (the name only shows when she joins or drives).
+      if (presence !== 'active' && this.label && this.labelKind !== 'status') this.setLabel('', 'name');
+      this.send(true);
+      return;
     }
 
     if (now - this.lastSent >= SEND_EVERY_MS) this.send(false);
-    // Keep-alive so overlays that (re)load mid-session always have a current frame.
-    if (now - this.lastSent >= 1000) this.send(true);
+    // Keep-alive, in case an overlay missed a frame (one that (re)loads is sent the current one).
+    if (now - this.lastSent >= 5000) this.send(true);
   }
 
   /** Current frame, for overlays that just became ready. */
@@ -365,20 +412,25 @@ export class CursorEngine extends EventEmitter {
       pos: { x: Math.round(this.pos.x * 10) / 10, y: Math.round(this.pos.y * 10) / 10 },
       rot: this.rot,
       scale: 1,
-      glow: this.activity === 'speaking' ? 1 : 0.7,
+      glow: 0,
       visible: this.mode !== 'hidden',
       activity: this.activity,
       label: this.label,
       labelKind: this.labelKind,
       labelSeq: this.labelSeq,
       level: Math.round(this.level * 100) / 100,
+      presence: this.presenceNow,
+      mouse: { x: Math.round(this.mouse.x), y: Math.round(this.mouse.y) },
       t: Date.now(),
     };
   }
 
   private send(force: boolean): void {
     const f = this.frame();
-    const key = `${f.pos.x},${f.pos.y},${f.activity},${f.labelSeq},${f.visible},${this.mode},${f.level}`;
+    // The student's pointer only matters to the overlays near their cards and chips (which fade
+    // out of its way), and then at a couple of pixels' precision. Elsewhere moving it sends nothing.
+    const near = this.opts.pointerMatters ? this.opts.pointerMatters(f.mouse) : true;
+    const key = `${f.pos.x},${f.pos.y},${f.activity},${f.labelSeq},${f.visible},${this.mode},${f.level},${f.presence},${near ? `${f.mouse.x >> 1},${f.mouse.y >> 1}` : 'far'}`;
     if (!force && key === this.lastFrameKey) return;
     this.lastFrameKey = key;
     this.lastSent = Date.now();
