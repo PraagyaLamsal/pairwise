@@ -1,4 +1,4 @@
-import { inflateRect, rectContains, rectsIntersect, type Rect } from '@shared/geometry';
+import { inflateRect, rectContains, rectsIntersect, unionRects, type Rect } from '@shared/geometry';
 import type { InkItem } from '@shared/ink';
 import { inkAnchor, inkCover } from '@shared/ink-geometry';
 import type { TrackGroup, TrackResult } from '@shared/ipc';
@@ -12,7 +12,11 @@ const log = logger('sticky');
 const TICK_MS = 250;
 /** …and half as often once nothing has moved for a while. */
 const QUIET_AFTER_MS = 2000;
-/** After a move, the old place stays masked a moment (the overlays may not have redrawn yet). */
+/**
+ * After a move, where the marks were stays masked a moment (the overlays may not have redrawn
+ * yet), and for a chip, its whole way to the new place: it glides there, and a capture can
+ * catch it anywhere along it.
+ */
 const RECENT_MS = 700;
 /** At most this many groups are followed (the newest). */
 const MAX_GROUPS = 8;
@@ -54,9 +58,10 @@ export function trackGroups(items: InkItem[], display: Rect, now = Date.now(), a
 /**
  * Sticky ink: marks stay with what they mark. While there are marks on the screen the student
  * is working on, the engine compares what's under them with how it looked a moment ago (no
- * pixels leave the engine for this). Scrolled: the marks move with it — and so do the turn's
- * marks still to come, and her cursor if it's pointing there. Gone (another app, a closed
- * tab): they clear, rather than point at the wrong thing.
+ * pixels leave the engine for this). Scrolled, or the window dragged: the marks move with it —
+ * and so do the turn's marks still to come, and her cursor if it's pointing there. Gone
+ * (another app, a closed tab): they hide rather than point at the wrong thing, and come back
+ * if it does.
  */
 export class StickyInk {
   private timer: NodeJS.Timeout | null = null;
@@ -123,7 +128,9 @@ export class StickyInk {
         const g = groups.find((x) => x.key === t.key);
         if (g) this.apply(t, g);
       }
-      const quiet = r.track.every((t) => t.state === 'steady');
+      // Nothing moving, or only looking for what went away: half as often after a while (a look
+      // for it can mean a search of the whole screen).
+      const quiet = r.track.every((t) => t.state === 'steady' || (t.state === 'unsure' && this.away.has(t.key)));
       if (!quiet) this.quietSince = 0;
       else if (!this.quietSince) this.quietSince = now;
     } catch (e) {
@@ -149,7 +156,8 @@ export class StickyInk {
     out.push(...this.s.overlays.uiRects());
     const hud = this.s.deps.hud.visible ? this.s.deps.hud.bounds() : null;
     if (hud) out.push(hud);
-    for (const it of items) out.push(...inkCover(it));
+    // (A little past each mark: a pill's soft edge spills over its box.)
+    for (const it of items) out.push(...inkCover(it).map((r) => inflateRect(r, 2)));
     out.push(...this.recent.map((r) => r.rect));
     return out;
   }
@@ -159,22 +167,31 @@ export class StickyInk {
   }
 
   private apply(t: TrackResult, g: TrackGroup): void {
-    if (t.state === 'moved' && Math.abs(t.dy) >= 1) {
+    const dx = Math.round((t.dx ?? 0) * 2) / 2;
+    if (t.state === 'moved' && (Math.abs(t.dy) >= 1 || Math.abs(dx) >= 1)) {
       const dy = Math.round(t.dy * 2) / 2;
       const now = Date.now();
       if (this.overlaysCaptured) {
-        for (const it of this.s.ink.all()) if ((it.group ?? it.id) === t.key) for (const rect of inkCover(it)) this.recent.push({ rect, until: now + RECENT_MS });
+        for (const it of this.s.ink.all()) {
+          if ((it.group ?? it.id) !== t.key) continue;
+          // A chip sits beside its line: all of its way can be masked. A circle's way would
+          // cover the very line it's around, so only where it was is.
+          for (const rect of inkCover(it)) {
+            const way = it.kind === 'text' ? unionRects([rect, { ...rect, x: rect.x + dx, y: rect.y + dy }])! : rect;
+            this.recent.push({ rect: inflateRect(way, 2), until: now + RECENT_MS });
+          }
+        }
       }
-      const moved = this.s.ink.shift(this.filter(t.key), 0, dy, prefersReducedMotion() ? 0 : 140);
-      this.s.visual.shiftWaiting(t.key, 0, dy);
+      const moved = this.s.ink.shift(this.filter(t.key), dx, dy, prefersReducedMotion() ? 0 : 140);
+      this.s.visual.shiftWaiting(t.key, dx, dy);
       // Marks whose own line scrolled out of view (under a header, past the pane) are parked
       // until it's back; ones whose line came back into view show again.
       const lost = (t.lost ?? []).map((k) => g.ids[k]).filter(Boolean);
       if (lost.length) this.s.ink.park(lost, true);
       // Her cursor on one of these marks goes with it.
       const c = this.s.cursor.position;
-      if (g.anchors.some((a) => rectContains(inflateRect(a, 40), c))) this.s.cursor.follow(0, dy);
-      log.info(`marks ${t.key} moved ${dy} px with the screen (${moved.length})`);
+      if (g.anchors.some((a) => rectContains(inflateRect(a, 40), c))) this.s.cursor.follow(dx, dy);
+      log.info(`marks ${t.key} moved ${dx ? `${dx}, ` : ''}${dy} px with the screen (${moved.length})`);
     }
     if (t.back?.length) this.s.ink.park(t.back, false);
     if (t.forget?.length) this.s.ink.fade({ ids: t.forget });
@@ -190,15 +207,15 @@ export class StickyInk {
       const a = this.away.get(t.key);
       this.away.delete(t.key);
       const dy = Math.round(t.dy * 2) / 2;
-      if (Math.abs(dy) >= 1) {
-        this.s.ink.shift(this.filter(t.key), 0, dy, 0);
-        this.s.visual.shiftWaiting(t.key, 0, dy);
+      if (Math.abs(dy) >= 1 || Math.abs(dx) >= 1) {
+        this.s.ink.shift(this.filter(t.key), dx, dy, 0);
+        this.s.visual.shiftWaiting(t.key, dx, dy);
         // Her cursor, if it was resting among them, comes back with them.
         const c = this.s.cursor.position;
-        if (g.anchors.some((r) => rectContains(inflateRect(r, 40), c))) this.s.cursor.follow(0, dy);
+        if (g.anchors.some((r) => rectContains(inflateRect(r, 40), c))) this.s.cursor.follow(dx, dy);
       }
       if (a) this.s.ink.park(a.ids, false);
-      log.info(`marks ${t.key} back with what they mark (${dy} px)`);
+      log.info(`marks ${t.key} back with what they mark (${dx ? `${dx}, ` : ''}${dy} px)`);
     }
   }
 }

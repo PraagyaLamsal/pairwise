@@ -56,19 +56,26 @@ async function session(html = IDE, size = { width: 860, height: 440 }) {
   return { app, S, win, d1, displayId };
 }
 
-/** Start recording the overlay's frames in `region` (global DIP) over the screen beneath. */
-async function record(app, displayId, region) {
+/**
+ * Start recording the overlay's frames in `region` (global DIP) over the screen beneath. `hide`:
+ * target windows left out of that one capture (a window that will move is laid over it from
+ * its own captures instead, see `window`).
+ */
+async function record(app, displayId, region, { hide = [] } = {}) {
   await app.evaluate(async ({ desktopCapturer, screen }, o) => {
     const s = globalThis.__pairwise.session;
     const d = globalThis.__pairwise.platform.displays.byId(o.displayId);
     const w = s.overlays.windowFor(o.displayId);
     const vis = (v) => w.webContents.executeJavaScript(`document.documentElement.style.visibility = '${v}'; new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    const hidden = (globalThis.__targets ?? []).filter((t) => o.hide.includes(t.id));
+    for (const t of hidden) t.hide();
     await vis('hidden');
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, hidden.length ? 400 : 150));
     const all = screen.getAllDisplays();
     const W = Math.max(...all.map((x) => x.bounds.x + x.bounds.width));
     const H = Math.max(...all.map((x) => x.bounds.y + x.bounds.height));
     const [src] = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: W, height: H } });
+    for (const t of hidden) t.showInactive();
     await vis('visible');
     const crop = { x: Math.round(o.region.x), y: Math.round(o.region.y), width: Math.round(o.region.width), height: Math.round(o.region.height) };
     const local = { ...crop, x: crop.x - d.bounds.x, y: crop.y - d.bounds.y };
@@ -78,7 +85,7 @@ async function record(app, displayId, region) {
       globalThis.__rec.frames.push({ t: Date.now(), png: img.crop({ x: Math.round(local.x * k), y: Math.round(local.y * k), width: Math.round(local.width * k), height: Math.round(local.height * k) }).resize({ width: local.width }).toPNG().toString('base64') });
     });
     w.webContents.invalidate();
-  }, { displayId, region });
+  }, { displayId, region, hide });
   return {
     pointer: [],
     windows: [],
@@ -157,9 +164,9 @@ const LONG = [
   '',
   'print(fib(3), factorial(3))',
 ];
-const SCROLLING = `<!doctype html><html><body style="margin:0;font-family:DejaVu Sans,Arial,sans-serif;background:#fff;color:#111">
+const SCROLLING = (paneHeight) => `<!doctype html><html><body style="margin:0;font-family:DejaVu Sans,Arial,sans-serif;background:#fff;color:#111">
 <div style="padding:10px 16px;background:#eef1f5;border-bottom:1px solid #ccd;font-size:16px">main.py</div>
-<pre id="code" style="margin:0;height:330px;overflow:auto;padding:14px 22px;font:20px/1.5 DejaVu Sans Mono,monospace">${LONG.map((l, i) => `<span data-t="l${i}">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;') || ' '}</span>`).join('\n')}</pre></body></html>`;
+<pre id="code" style="margin:0;height:${paneHeight}px;overflow:auto;padding:14px 22px;font:20px/1.5 DejaVu Sans Mono,monospace">${LONG.map((l, i) => `<span data-t="l${i}">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;') || ' '}</span>`).join('\n')}</pre></body></html>`;
 
 const scenes = {
   async trace() {
@@ -226,9 +233,10 @@ const scenes = {
   },
 
   async sticky() {
-    const { app, S, win, d1, displayId } = await session(SCROLLING, { width: 760, height: 380 });
-    const region = { x: d1.bounds.x + 70, y: d1.bounds.y + 90, width: 720, height: 380 };
-    const rec = await record(app, displayId, region);
+    // A smaller window than the region, so there's room to drag it.
+    const { app, S, win, d1, displayId } = await session(SCROLLING(300), { width: 620, height: 340 });
+    const region = { x: d1.bounds.x + 70, y: d1.bounds.y + 90, width: 720, height: 400 };
+    const rec = await record(app, displayId, region, { hide: [win.id] });
     await rec.window(win);
     // Lines by their box in the latest frame (the OCR stand-in misses `_` and short lines).
     const box = (r) => S((_e, rr) => {
@@ -265,8 +273,26 @@ const scenes = {
     await scroll(0, 120, 700);
     await sleep(2200);
     await scroll(120, 0, 600);
-    await sleep(2400);
-    await rec.stop('demo-sticky', { width: 640 });
+    await sleep(2000);
+    // Then they drag the window by its title bar: her marks go with it.
+    const grab = { x: win.bounds.x + 260, y: win.bounds.y + 20 };
+    await rec.move(grab, 700);
+    await sleep(250);
+    const by = { x: 70, y: 40 };
+    const n = 16;
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const off = { x: Math.round(by.x * e), y: Math.round(by.y * e) };
+      await S((_e, o) => globalThis.__targets.find((w) => w.id === o.id).setBounds({ ...o.b, x: o.b.x + o.off.x, y: o.b.y + o.off.y }), { id: win.id, b: win.bounds, off });
+      await rec.move({ x: grab.x + off.x, y: grab.y + off.y }, 16);
+      await rec.window(win);
+      await sleep(20);
+    }
+    await sleep(500);
+    await rec.move({ x: grab.x + by.x + 160, y: grab.y + by.y + 230 }, 600);
+    await sleep(1800);
+    await rec.stop('demo-sticky', { width: 640, fps: 15 });
     await app.close();
   },
 

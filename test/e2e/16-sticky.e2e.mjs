@@ -1,7 +1,7 @@
 // Polish — sticky ink: Ada's marks stay with what they mark. Scroll the code and her circle and
 // value chip move with their lines (through the real screen stream and the engine's tracker);
 // a still screen, or the student's pointer resting on a mark, moves nothing; another page in
-// front of the code clears them.
+// front of the code hides them until it's back; drag the window and they go with it.
 import { join } from 'node:path';
 import { launch, main, waitFor, sleep, artifacts, assert, FAKE_DISPLAYS, openTargetWindow, screenShot, pointer } from './harness.mjs';
 
@@ -195,7 +195,25 @@ try {
   }
   await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-back-screen.png`));
 
-  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); a line under the header → parked, back with it; scrolled mid-trace → later chips on their lines; another page → hidden, and back with the code');
+  // --- 5. dragging the window: the marks go with it, sideways too ------------------------------
+  const before = (await shown()).filter((i) => i.chip);
+  const b0 = await S((_e, wid) => globalThis.__targets.find((w) => w.id === wid).getBounds(), win.id);
+  const drag = { x: -30, y: -24 };
+  for (let i = 1; i <= 8; i++) {
+    await S((_e, o) => globalThis.__targets.find((w) => w.id === o.id).setBounds({ ...o.b, x: Math.round(o.b.x + o.dx * o.t), y: Math.round(o.b.y + o.dy * o.t) }), { id: win.id, b: b0, dx: drag.x, dy: drag.y, t: i / 8 });
+    await sleep(60);
+  }
+  await sleep(2500);
+  const after = (await shown()).filter((i) => i.chip);
+  assert.equal(after.length, before.length, `every chip still shows after the drag (${after.length} of ${before.length})`);
+  for (const c of after) {
+    const was = before.find((i) => i.id === c.id);
+    const off = { x: c.at.x - was.at.x, y: c.at.y - was.at.y };
+    assert.ok(Math.abs(off.x - drag.x) <= 2 && Math.abs(off.y - drag.y) <= 2, `"${c.text}" went with the window (moved ${off.x}, ${off.y}; the window ${drag.x}, ${drag.y})`);
+  }
+  await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-dragged-screen.png`));
+
+  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); a line under the header → parked, back with it; scrolled mid-trace → later chips on their lines; another page → hidden, and back with the code; the window dragged → the chips went with it (±2 px)');
   console.log(`sticky ink e2e (${d1.scaleFactor}x): all checks passed`);
 } finally {
   await app.close().catch(() => undefined);

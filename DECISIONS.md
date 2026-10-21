@@ -509,8 +509,7 @@ scaled down on the GPU; the full comparison runs only when that look changes —
 and dropped: it relied on frame callbacks in a hidden window, which macOS might not deliver,
 to save a fraction of a percent of CPU.)
 Paused vision turns it off too (no looking at the screen at all), and so does Settings →
-Cursor & ink → "Keep drawings with what they mark". Horizontal scrolling and windows being
-dragged aren't followed (the marks clear instead).
+Cursor & ink → "Keep drawings with what they mark". Dragged windows and sideways scrolls: D-048.
 
 
 ### D-047 · Hub fixes from a screenshot tour
@@ -525,3 +524,41 @@ dragged aren't followed (the marks clear instead).
   chevron sat mid-box. A set width now wins.
 - **What's new** has six short items (two lines each at most), so the card doesn't push the
   courses below the fold.
+
+### D-048 · Sticky ink follows a dragged window (and a sideways scroll)
+Dragging the editor across the screen used to hide Ada's marks: the tracker only searched up
+and down. Now, when none of a group is where it was and no vertical scroll explains it, the
+engine searches the whole screen in two dimensions, on summed-area tables (a block's mean is
+four look-ups):
+- the marked areas as 8×8-pixel block means (16 DIP) against the screen every 4 px, so no
+  offset is more than a quarter of a block off (at 8 px steps, a window half a block off fell
+  out of the best six); the best six, 8 px apart, giving up on an offset as soon as it can't
+  make them;
+- 4×4 blocks pixel by pixel around each; single pixels around the best three; then half pixels
+  sideways and quarter pixels down for the best. Half pixels matter: the tracking image is half
+  a pixel per DIP, so a window moved by an odd number of DIP lands between pixels, and whole
+  pixels never matched it.
+It's taken only if most of the group matches there, no other place (3 px or more away) comes
+within 0.1, it has a sideways part (straight up or down is the vertical search's), and it fits
+far better than not moving at all. "Matches" is looser here (0.75 rather than 0.5): half a
+pixel off in both directions scores ~0.55, unrelated content 1.5 and up. So another window
+where the code was stays "changed", rather than a look-alike somewhere else. One pixel sideways
+counts too: a look that catches a drag just short of where it stops leaves exactly that.
+The marks glide there like after a scroll, with the turn's marks still to come and her cursor;
+a group that went away (another app) is looked for the same way, so it comes back even if its
+window was moved meanwhile. Parked lines and the snap against the first look keep a sideways
+offset too.
+Where captures include Pairwise's own windows, the marks themselves are masked out, and two
+details there each hid the marks in testing: a capture can catch a chip mid-glide, so after a
+move a chip's whole way from its old place to its new one stays masked for 0.7 s (not just the
+two ends); and a chip's soft edge spills past its box, so every mask is 2 DIP wider. Only
+chips: a circle's way would cover the very line it's around (they sit beside their lines,
+circles around them), and when circles were masked that way, a circled line scrolling under the
+header could no longer be seen going, and its circle wasn't hidden.
+Cost: the 2-D search runs only when the vertical one has failed with nothing in place: about
+9 ms on top of the ~10 ms vertical search for a 720×450 capture. While a group is away, its
+looks count as quiet, so after 2 s they're taken half as often. Windows dragged to another
+display aren't followed (each display is its own stream). Checked with
+`scripts/debug/sticky-dump.mjs` (`DRAG=70,40`, a scroll down and back, then a drag): the
+failures above came from its earlier runs; in every run since the last fix, the marks followed
+the drag in one to seven steps and ended within 1 DIP of their lines.
