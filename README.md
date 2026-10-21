@@ -15,6 +15,8 @@ happens. It's a normal Mac app you can keep in the Dock (`npm run app`), with a 
 Ask what your code actually does and she **traces it like a debugger, on your own screen**: her
 cursor steps through the lines as they run while she talks, and the values appear right after
 each line (`n = 3`, `returns 6`), updating in place as a loop or a recursive call goes round.
+And to check you've really got it, she sometimes asks you to **show her** — "click the line where
+the recursion stops" — and knows whether you clicked the right spot.
 
 Built for macOS (v1), structured so Windows/Linux can follow (`src/main/platform/`). Gemini only.
 
@@ -31,8 +33,9 @@ Built for macOS (v1), structured so Windows/Linux can follow (`src/main/platform
 
 ## What it looks like
 
-These are real captures from the end-to-end tests (Linux/Xvfb, with the scripted demo tutor). On
-a Mac the system fonts and window chrome differ; the overlay, cursor and ink are the same.
+These are real captures of the app (Linux/Xvfb, with the scripted demo tutor), from the end-to-end
+tests and `scripts/record-demos.mjs`. On a Mac the system fonts and window chrome differ; the
+overlay, cursor and ink are the same.
 
 | She traces your code like a debugger | She points like a person on a call |
 |---|---|
