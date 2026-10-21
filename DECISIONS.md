@@ -491,3 +491,16 @@ Paused vision turns it off too (no looking at the screen at all), and so does Se
 Cursor & ink → "Keep drawings with what they mark". Horizontal scrolling and windows being
 dragged aren't followed (the marks clear instead).
 
+
+### D-047 · Hub fixes from a screenshot tour
+- **The selected course's ink ring was 40 % of a ring.** The loop is drawn in with a dash
+  animation; with a stretched viewBox and a non-scaling stroke, Chromium measured the dash in
+  screen pixels against a length in viewBox units, so only about 40 % ever showed (since round
+  1, in every screenshot). It's now drawn in the element's own pixels, and squarish (a
+  superellipse) so it hugs the card instead of cutting through "Last session …" at the corners.
+  The same ring marks the chosen talk mode in onboarding.
+- **Narrow selects overflowed their rows** (the ink-fade delay, the takeover timeout, the budget
+  warning): a 140 px minimum beat their set width, so the box ran 30 px past its row and its
+  chevron sat mid-box. A set width now wins.
+- **What's new** has six short items (two lines each at most), so the card doesn't push the
+  courses below the fold.
