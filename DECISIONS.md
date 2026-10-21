@@ -39,11 +39,11 @@ said go to the AI as one question". heyclicky uses ⌃⌥ for push-to-talk, so o
 hold ⌃⌥, talk, drag to circle; release to send. `⌃⌥D` toggles draw mode for trackpad users who
 can't hold keys while dragging. All shortcuts are editable in Settings → Shortcuts.
 
-### D-007 · The tutor's cursor follows yours by default
+### D-007 · The tutor's cursor follows yours by default *(replaced in round 2 by D-029: it stays put)*
 Like heyclicky/Clicky, the buddy sits just below-right of your pointer, swoops to targets on a
 bezier arc when it explains something and flies back afterwards. "Stay put" is a setting.
 
-### D-008 · Visual language: two inks
+### D-008 · Visual language: two inks *(the glow and marker look were replaced in round 2 by D-029/D-030)*
 Tutor = blue (#2F7BFF, heyclicky-style glowing pointer and marker strokes), student = orange
 (#FF8A1F). Both colors are settings. App chrome is quiet native dark UI so ink carries the
 personality. The cursor animation constants (arc height ∝ distance, smoothstep easing, 1.3×
@@ -103,7 +103,7 @@ appear as its words are spoken (matched on the live transcript), like HeyClicky'
 Starting a session hides the course window: the tutor should see the student's work, and the
 HUD + menu-bar icon carry the controls. Reopen it from the menu-bar icon.
 
-### D-017 · The tutor's cursor always carries a name pill
+### D-017 · The tutor's cursor always carries a name pill *(replaced in round 2 by D-029: labels only on join, pointing and driving)*
 The brief asks for a labeled cursor. The pill shows the tutor's name while following you and
 switches to the label of what it is pointing at ("Submit", "click here") while pointing.
 
@@ -187,3 +187,126 @@ download. On a fresh Mac checkout this showed up as "Error: Electron uninstall".
 `scripts/ensure-electron.mjs` now runs from `postinstall` and before `dev`/`start`, and it
 downloads the binary if it's missing. This was found on the user's Mac. The sandbox had never
 hit it because the e2e runs had already triggered the download.
+
+## Round 2 (2026-10-21): feedback from the first real use on a Mac
+
+### D-028 · OCR passes run with one OpenMP thread each
+The offline grounder runs up to four tesseract passes at once. With tesseract's default OpenMP
+threading they fought over the cores: on a 4-core machine a pass that takes 0.25 s alone stalled
+for 30 s or more, so every OCR-grounded test found nothing (0/18 in the pointing check). Each
+pass now runs with `OMP_THREAD_LIMIT=1` and the four finish together in ~0.3 s. This is the
+offline fallback and the test stand-in for Gemini; Gemini grounding was not affected.
+
+### D-029 · Ada's cursor stays where she leaves it (follow mode removed)
+The owner found the follow-your-pointer buddy "violent". Like a person's cursor on a Tuple call,
+it now appears once beside the student's pointer when the session starts (with her name), then
+only moves when she moves it: to point, draw or gesture. It never follows and never flies home.
+The `cursorBehavior` setting is gone (stay is the only behaviour; settings v2 drops the key).
+*Presence:* while it moves or shows a label it is at full strength; 1.2 s after it stops it fades
+to 35 % and hides its label; when the student's pointer comes within ~60 px (leaves at ~84 px)
+it fades to 12 %. A pointing label stays up for its hold (2.6 s) and longer while she is still
+talking. Main computes the presence (unit-testable) and sends it with each frame, together with
+the student's pointer position, which the overlays also use for the proximity fade of cards.
+*Labels:* her name only when she joins and "Ada is driving" while driving; a pointing label when
+she points; no label after drawing or gesturing. After a takeover the cursor stays at the last
+spot she drove to. *Look:* a flat arrow in her colour with a white edge and a small shadow (no
+glow, no rotation or scaling in flight, no comet trail); flights use a gentler curve (arc
+≤ 46 px) and a minimum-jerk speed profile, like a hand moving a mouse.
+
+### D-030 · Tuple's paint for all ink
+Measured from Tuple 3.3.10 (HANDOFF research): one flat colour, constant width, round caps and
+joins, midpoint quadratic smoothing, no glow, no pressure. Pairwise now strokes every mark with
+a 5.5 px brush (`BRUSH_WIDTH`), `lineCap = lineJoin = 'round'`, through the shared
+`smoothPath()` (each segment curves to the midpoint of the next two points), with at most a
+barely visible shadow (rgba 0,0,0,0.2, 1.5 px). A click without a drag, or a stroke with no
+length, is a dot of the brush's diameter (student strokes keep single points now; the composite
+frame sent to the tutor draws them too). Highlights are one flat translucent band (30 %) with
+rounded ends inset so they land on the text's edges. `perfect-freehand` is no longer used.
+*Highlight click:* `ring` is Tuple's: a small filled dot that turns into a ring, grows and thins
+from 6 to 3 px as it fades, twice (0.9 s each, 0.42 s apart). A ring that stays (a guided step
+waiting for a click) repeats the pair every 3.4 s instead of breathing.
+
+### D-031 · Ada's notes are typed, like Tuple's text tool (handwriting is a setting)
+Notes are typed letter by letter in the system font, semibold
+(`-apple-system, 'SF Pro Text', 'Inter Variable'`), 19 px, in her colour, with a caret and a
+dotted outline while typing that fade after it; no background or bubble. The cadence is a
+deterministic per-seed plan (`typingPlan`): 45–110 ms per key, +40–120 ms after a space,
++110–280 ms after punctuation, the odd hesitation; capped at 3.8 s per note. While typing, the
+cursor rests where it "clicked" to place the note. *Setting:* Settings → Cursor & ink →
+"Ada writes notes: Typed (like Tuple) / Handwritten" (`noteStyle`, default typed); handwritten
+notes use Caveat at 27 px as before (no halo or glow). *Width estimates:* the old 0.46 em/char
+guess for Caveat was ~30 % too wide. `approxTextWidth()` now uses per-class advance widths
+measured in Chromium for Inter 600 (a close stand-in for SF Pro Semibold) and Caveat 700, good
+to a few percent on phrases; notes placement, diagram node sizes and the pen use it. Whiteboard
+labels use the same fonts (smaller sizes for the system font) and type at 60 % of the note pace.
+
+### D-032 · A quiet screen (Tuple-like declutter)
+* **Session bar:** a small pill (course dot + timer, mic, Ada's state, the "can see" eye, End;
+  a `demo` badge without a key) at 62 % opacity until hovered or something needs attention
+  (asking, driving, connecting). Hovering ~0.15 s opens the full controls; it closes 0.65 s
+  after the pointer leaves. Draggable; the position is remembered per display (`hudPositions`).
+  The window is sized tightly so its transparent margin doesn't block clicks.
+* **Privacy indicator:** the eye in the pill replaces the separate "Ada can see this screen"
+  pill. If the bar is hidden (⌃⌥H) a tiny eye stays in the corner of that display.
+* **Captions:** off by default (settings v2 turns them off once on upgrade). When on, one subtle
+  line of Ada's current sentence under the pill, gone ~4 s after she stops.
+* **Toasts:** none for mute, unmute or talk mode (the pill shows them: red mic, a key badge in
+  hold-to-talk); "video paused" and "saving to notes" are explained once per session; warnings
+  (budget, capture, connection) and "You have control" stay.
+* **Step card:** one line ("1/3 · Click Run") at the top right. It opens to the full list for
+  3.2 s whenever a step changes, or while the pointer rests on it for 0.7 s.
+* **Citations and "beyond this course":** small chips that hide after 5–6 s.
+* **App Veil outline:** 1.5 px dashed; its label shows for 4 s after the window is first veiled.
+* **Proximity fade:** cards, chips and labels fade to 15 % when the student's pointer is within
+  56 px, and every overlay stays click-through, except the consent card (it must be clicked) and
+  the driving frame and banner (they must stay obvious).
+* **Celebration:** 42 confetti instead of 110, and the word in her colour without a glow.
+An idle session now shows the pill and Ada's dimmed cursor, nothing else (e2e 11).
+
+### D-033 · A human pen: slower, eased, varied
+* **Timing** (shared `penStateAt`, so the renderer and the cursor agree): each stroke takes
+  260 ms (120 ms for later strokes of the same mark) + ~0.98 ms/px — about 30 % slower than
+  round 1 — and follows a minimum-jerk profile (82 % min-jerk + 18 % linear, so the pen is
+  already moving when it touches down). Arc length is weighted by local turning, so the pen
+  slows into corners (~2.4× time per px at a sharp corner). Between strokes of one mark the pen
+  lifts for 80–200 ms while the cursor travels to the next stroke. Marks take 0.42–1.9 s.
+* **Variation** (from each item's seed, the same on every display): arrows bow 4–12 % of their
+  length to a random side (1–3 % for diagram edges), heads 22–35° and 12–18 px, slightly
+  lopsided, drawn as one "V" or two separate barbs; circles start mostly at the upper left, go
+  either way round (65 % anticlockwise), overshoot 8–25°, tilt up to ±4° and wobble 1.5–3 % in
+  radius, and still clear the target's corners (superellipse fit kept); underlines tilt up to
+  ±1.5° (≤ 3.5 px), sag a little, vary ±4 % in length and sometimes hook; boxes start mostly at
+  the top left, bow their sides and close past the start; checks and crosses vary in proportion.
+
+### D-034 · Pointer-only gestures
+A new Live tool, `move_cursor({ target, style: hover | follow_line | sweep, lines? })`, and the
+same three as beat kinds in `explain_on_screen`. Grounding and own-UI exclusion are the same as
+`point_at`. Nothing is drawn and no label shows. *follow_line* glides just under the line (the
+tip never covers the letters) at ~190 px/s for 26 px text (scaled with the text size, 0.8–4.5 s);
+*sweep* rests on each line of a block (one stop per ~28 px unless `lines` is given), just left of
+where the lines start, ~0.64 s per line; *hover* rests on the target low and right of its middle
+so its label stays readable. The system prompt now asks for frequent pointing and gestures and
+sparing ink; the planner prompt allows at most one mark per explanation unless marking really
+helps. The demo tutor has a "walk me through this" turn and its explanation leads with a sweep
+and a line-follow.
+
+### D-035 · A real Mac app in the Dock (`npm run app`)
+`scripts/build-app.mjs` builds the code, packages `Pairwise.app` for the Mac's own chip with
+`electron-builder --mac dir -c.mac.identity=null`, signs it ad hoc (`codesign --force --deep
+--sign -`, after clearing extended attributes; Apple Silicon only runs signed code), verifies the
+signature, quits a running copy if there is one (it ends a live session properly), replaces
+`/Applications/Pairwise.app` (or `~/Applications` if `/Applications` isn't writable) with
+`ditto`, and opens it. `LSUIElement` is gone and the Dock icon is no longer hidden: clicking it
+opens the hub, its menu starts a session (per course, or "Resume <course>") or ends one, and the
+app menu has Pairwise (Settings… ⌘,), Edit (copy and paste in fields), Session and Window. The
+menu-bar icon stays. `PAIRWISE_SIGN_IDENTITY` signs with a stable self-signed certificate
+instead, so macOS keeps permissions across rebuilds; `--reset-permissions` clears stale TCC
+entries with `tccutil` (opt-in, as it changes system state). `npm run dist:mac` still makes the
+unsigned DMGs. Building the `.app` in the cloud and signing it with `rcodesign` was skipped:
+a downloaded app would be quarantined, and building locally is one command.
+
+### D-036 · A key saved by another build is asked for again
+`npm run dev` stores the key with Electron's keychain entry ("Electron Safe Storage"); the
+packaged app has its own ("Pairwise Safe Storage") and can't decrypt it. The settings service
+now reports such a key as `unreadable`; the hub opens on Settings → Gemini, explains why, and
+the sidebar says the key needs pasting again. Until then the demo tutor runs.

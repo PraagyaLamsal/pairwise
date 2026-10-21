@@ -49,7 +49,7 @@ is deterministic (D-014, D-019).
 
 | Feature | Status | How it was checked |
 |---|---|---|
-| Labeled cursor (name pill) that follows you, glides to targets on an arc, parks, flies home | ✅ | e2e reads the cursor tip from the engine *and* from the overlay's DOM; unit tests for flight → park → return, and a new flight during the flight home (bug found + fixed) |
+| Labeled cursor (name pill) that follows you, glides to targets on an arc, parks, flies home *(round 2: it stays where she leaves it instead — see Round 2)* | ✅ | e2e reads the cursor tip from the engine *and* from the overlay's DOM; unit tests for flight → park → return, and a new flight during the flight home (bug found + fixed) |
 | `point_at` lands on the real UI | ✅ | tip inside the button every run: 1× and 2× (0–19 px from centre; wide buttons are pointed at near their start) |
 | Circles enclose the target, underlines sit under the word | ✅ | rendered ink *pixels* measured: circle margins 9–16 px on every side, underline within 0–7 px of the word's ends, at 1× and 2× |
 | Labels snap to the control ("the Submit button" → the button, not its text) | ✅ | grounded box = the button's rect ±1 px; unit-tested on synthetic outlined, filled and plain-text cases |
@@ -123,20 +123,37 @@ onboarding, usage meter + cap, settings for voice/speed/depth, celebrations) are
 | Quitting mid-session | ✅ | the session is ended properly first (notes + resume state) |
 | Polish | ✅ | hub, HUD, overlays, whiteboard and cards reviewed from screenshots at 1× and 2×; HUD asking/driving states, citation card, consent cards placed away from what they ask about |
 
-## Round 2: in progress
-This round covers the owner's feedback from first use on a Mac: cursor, Tuple brush, declutter, human pen, cursor gestures and a Dock app.
-The plan, research and status are in [HANDOFF.md](HANDOFF.md).
+## Round 2 — feedback from the first real use on a Mac ✅
+The owner's six requests (HANDOFF.md, verbatim) and how each was checked. Decisions: D-028 to
+D-036. Everything below runs on Linux/Xvfb with the fake platform and the Live mock; 🍎 = also
+worth a look on the Mac (BLOCKERS.md B-5, B-8).
+
+| Request | Status | How it was checked |
+|---|---|---|
+| **1. Ada's cursor stays where she leaves it, dims when idle** | ✅ 🍎 | unit: stays put while the student's mouse wanders for 10 s, never flies home; presence active → idle (1.2 s) → near (pointer within 60 px) → active the moment it moves; label held while she's still talking; takeover parks at the last driven spot; mid-move positions are right (a bug found here, fixed). e2e 03 (1×, 2×): after pointing, the real pointer moves around and the cursor doesn't; the overlay DOM shows it at 35 % with no label, 12 % when the pointer comes close (screenshots `p3-*-cursor-idle/near-screen.png`) |
+| **2. Tuple's drawing: flat brush, dots, font, highlight click** | ✅ | unit (`ink.test.ts`, with a recording canvas): a click is a dot of the brush's diameter, every mark is stroked at one width with round caps/joins and no glow, highlights are one flat band, midpoint smoothing stays within ±1 px of the polyline (5 mark kinds × 39 seeds), the ring starts as a dot and thins 6 → 3 px over two pulses then disappears, typed notes reveal exactly the planned characters at 45–110 ms per key (slower after spaces and punctuation), widths match Chromium's measurements of Inter 600 and Caveat 700. e2e 03: circles still enclose the button and underlines sit under the word, measured on rendered pixels at 1× and 2×; screenshots reviewed (`p3-preview.png`) |
+| **3. A quiet, Tuple-like screen** | ✅ 🍎 | e2e 11: an idle session shows the session pill (252 px, 62 % opacity, collapsed, only mic / eye / End as buttons) and Ada's dimmed cursor, and *nothing else* on either display; hover opens it with all the controls; dragging remembers the spot per display; no toast for mute or talk mode; the step card is one line that opens when the step changes and fades to 15 % when the real pointer comes near; a citation is a chip that hides itself; captions are one line that fades ~4 s after Ada stops; hiding the pill leaves a tiny "can see" eye. Before/after screenshots: `docs/screenshots/declutter-before.png`, `idle-session.png` |
+| **4. Slower, human, varied pen** | ✅ | unit: 20 circles all differ yet all clear the target (both directions occur); 20 arrows differ in bow (3.5–12.5 % of length), head angle and size, with one- and two-stroke heads; underlines vary but stay under the word; a circle takes 1.2–1.45× round 1's time; the pen starts and ends each stroke slowly (minimum jerk) and is slower at a box's corners than along its sides; an arrow's head comes after an 80–200 ms pen lift during which nothing is drawn. Existing circle-enclosure tests kept. A review sheet of marks with 6 seeds each was checked by eye |
+| **5. The cursor as a pointer (no ink, no label)** | ✅ 🍎 | unit (`gestures.test.ts`): follow_line runs under the line at ~190 px/s, sweep stops on each line left of the text, hover rests below-right of the label, beats keep the order of gestures and marks and only marks become ink, the cursor visits the line left to right over time. e2e 12 (1×, 2×): grounded on a real line by OCR, the cursor (main *and* the drawn overlay) glides under "def factorial(n):" from start to end in ~1.5 s, rests on all four lines of the function in a sweep, hovers on Run; no ink, ring or label at any point. e2e 04: an explanation's first two lines sweep and follow (no ink), its last two lines draw, each when its words are heard |
+| **6. A real Mac app (Dock)** | ✅ 🍎 | `npm run app` (scripts/build-app.mjs) builds, packages for the Mac's chip, signs ad hoc, installs into /Applications (or ~/Applications) and opens it; unit test pins the steps and their order from `--dry-run`. `electron-builder --mac dir --arm64 -c.mac.identity=null` run here: `Pairwise.app` with an arm64 executable, `icon.icns`, no `LSUIElement`, mic/Apple-events usage strings, and darwin-arm64 natives unpacked (uiohook, robotjs, universal get-windows). Dock menu + app menu built in main; a key saved by `npm run dev` is reported as unreadable and asked for again (unit test with a stand-in keychain). Signing and launching need the Mac (B-8) |
+
+Also found and fixed this round: the OCR grounder's parallel tesseract passes stalled on a
+4-core machine (D-028); the cursor engine reported the start of the *next* move while still
+moving (main and overlay); the test harness's screen captures sometimes contained a stale copy
+of the overlay.
 
 ## Final verification
-The full run on 2026-10-20 started from a clean build, with dist/ and debug output removed.
+The full run on 2026-10-21 (round 2) started from a clean build, with out/ and dist/ removed.
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` | ✅ no errors |
-| `npm test` (vitest) | ✅ 12 files, **96/96** tests |
-| `npm run test:e2e` | ✅ **12/12** runs: 01-shell, 02-voice, 03-pointing at 1× and 2×, 04-ask-steps, 05-calibration at 1× and 2×, 06-course, 07-takeover, 08-veil, 09-whiteboard, 10-notes |
-| Pointing accuracy, 1× run (OCR grounder) | Built-in @1×: 9/9. Studio Display @2×: 9/9. Mean error 0.2 px. 0 found off target |
-| Pointing accuracy, 2× run (OCR grounder) | Built-in Retina @2×: 9/9. Studio Display @2×: 8/9 (one label not read by Tesseract). Mean error 0.0 px. 0 found off target |
-| Packaged app | The `dist:mac` build was made earlier this phase (arm64 `.app`, Info.plist and usage strings checked). Packaged Linux smoke test: indexing, a live session and search all worked |
+| `npm test` (vitest) | ✅ 16 files, **128/128** tests |
+| `npm run test:e2e` | ✅ **15/15** runs: 01-shell, 02-voice, 03-pointing at 1× and 2×, 04-ask-steps, 05-calibration at 1× and 2×, 06-course, 07-takeover, 08-veil, 09-whiteboard, 10-notes, 11-declutter, 12-gestures at 1× and 2× |
+| Pointing, 03 (1× / 2×) | tip inside the button every time (0–19 px from centre; wide buttons are pointed at near their start); circles clear the button by 10–19 px; underlines overhang the word by 4–13 px |
+| Pointing accuracy, 1× run (OCR grounder) | Built-in @1×: 8/9 (one small label, "Opal", not read by Tesseract). Studio Display @2×: 9/9. Every target that was found was hit; mean error 1.2 px |
+| Pointing accuracy, 2× run (OCR grounder) | Built-in Retina @2×: 9/9. Studio Display @2×: 9/9. Mean error 0.1 px, worst 0.6 px |
+| Gestures, 12 (1× / 2×) | followed 211 of 225 px of a line in 1.5 s (2×: 131 of 143 px in 1.0 s), left to right; swept all four lines; hovered Run; no ink, ring or label |
+| Packaged app | `electron-builder --mac dir --arm64 -c.mac.identity=null` (what `npm run app` runs before signing): arm64 `Pairwise.app`, `icon.icns`, no `LSUIElement`, usage strings, darwin-arm64 natives unpacked. Signing, installing and launching need the Mac (B-8) |
 
-Not verifiable from the sandbox: everything marked 🍎, as listed in BLOCKERS.md B-5.
+Not verifiable from the sandbox: everything marked 🍎, as listed in BLOCKERS.md B-5 and B-8.

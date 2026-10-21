@@ -3,14 +3,17 @@
 This is the living plan for the next round of work. Read it fully before changing code, then
 keep it current: tick items, add findings, record decisions in DECISIONS.md.
 
-## Where things stand (2026-10-21)
+## Where things stand (2026-10-21, end of round 2)
 
-* v0.1 is complete: all six build phases (see PROGRESS.md). The last full run on Linux/Xvfb:
-  typecheck clean, **96/96** unit tests, **12/12** e2e runs (pointing + calibration at 1× and 2×).
-* Since then only one fix landed: Electron 44 no longer downloads its binary in `npm install`.
-  `scripts/ensure-electron.mjs` runs from `postinstall` and `predev`/`prestart` (DECISIONS D-027).
-* The owner has run it on his Mac (macOS 27, Apple Silicon, Node 24) and loves it. He then asked
-  for the changes below. **None of them are implemented yet.** Only research has started (below).
+* **Round 2 is implemented and tested**: all six requests below (✅ in the plan), decisions
+  D-028 to D-036, PROGRESS.md "Round 2". Last full run on Linux/Xvfb: see PROGRESS.md
+  "Final verification" (typecheck clean, all unit tests, all e2e runs incl. the new
+  `11-declutter` and `12-gestures` at 1× and 2×).
+* On the owner's Mac: `git pull && npm install && npm run app` builds, signs (ad hoc), installs
+  and opens `Pairwise.app`; then Keep in Dock. Things only a Mac can confirm: BLOCKERS.md B-5
+  (round 2 bullets) and B-8.
+* v0.1 (all six build phases) is in PROGRESS.md. Round 1's last fix: Electron 44 no longer
+  downloads its binary in `npm install`; `scripts/ensure-electron.mjs` handles it (D-027).
 
 ## The owner's requests (verbatim, 2026-10-20)
 
@@ -105,7 +108,15 @@ Keep the Tuple bundle outside the repo.
 
 ## Plan (one task per request; check each off with its tests)
 
-### 1. Ada's cursor stays where she leaves it, dimmed when idle
+Status: **all done** (✅). What was actually built is summarised under each heading; details
+and the reasons are in DECISIONS.md, the tests in PROGRESS.md "Round 2".
+
+### 1. Ada's cursor stays where she leaves it, dimmed when idle ✅
+*Built (D-029):* `follow` and the `cursorBehavior` setting are gone; modes are
+`hidden | parked | timeline | driving`; main computes `presence` (active / idle 35 % after 1.2 s
+/ near 12 % within 60 px) and sends it, with the student's pointer, in every frame; labels only
+on join, pointing and driving; flat Tuple-style arrow. Found and fixed: `positionAt` reported the
+next move's start during a move. Tests: `cursor.test.ts`, e2e 03 (stays put + dimmed screenshots).
 * `src/main/session/cursor.ts` defines the modes `hidden | follow | timeline | parked | driving`,
   with `FOLLOW_OFFSET` and a spring. A `cursorBehavior: 'follow' | 'stay'` setting already exists
   (`src/shared/settings.ts`, default `'follow'`).
@@ -126,7 +137,10 @@ Keep the Tuple bundle outside the repo.
   Add a unit test that it stays put while the student's mouse moves, and one for the idle-opacity
   state. Add an e2e screenshot of the dimmed, parked cursor.
 
-### 2. Tuple's flat brush and font for all ink
+### 2. Tuple's flat brush and font for all ink ✅
+*Built (D-030, D-031):* `BRUSH_WIDTH` 5.5 px round brush, `smoothPath()` midpoint smoothing,
+dots, flat highlights, Tuple highlight-click ring, typed notes with caret and dotted box,
+`noteStyle` setting (typed default), measured width tables. Tests: `ink.test.ts`, e2e 03/04/12.
 * `src/renderer/ui/ink-render.ts` uses `perfect-freehand` (variable width, `simulatePressure`, glow
   `9–10`, tapers) and Caveat for text. Replace it with:
   * a **constant-width** Canvas stroke, `lineCap = lineJoin = 'round'`;
@@ -154,7 +168,11 @@ Keep the Tuple bundle outside the repo.
 * Tests: unit tests for the single-point dot, the constant width, and the smoothing staying within
   ±1 px of the input. Review e2e screenshots at 1× and 2×.
 
-### 3. Declutter (Tuple-like: lots of features, little on screen)
+### 3. Declutter (Tuple-like: lots of features, little on screen) ✅
+*Built (D-032):* session pill (hover opens, drag + per-display position, dimmed), one-line
+captions off by default (settings v2), toasts only for new information, one-line step card with
+peek, chips, subtle veil outline, proximity fade, privacy eye when the pill is hidden, smaller
+celebration. Test: e2e 11 (an idle session shows only the pill and the dimmed cursor).
 Current inventory (see `docs/screenshots/*.png`):
 * HUD bar: wide, about 10 buttons, `src/renderer/hud/Hud.tsx`.
 * "Demo tutor" note under the HUD.
@@ -194,7 +212,10 @@ Target:
 * Tests: e2e screenshots of a typical session before and after. Assert the number of visible
   overlay elements in an idle session (for example, HUD pill + Ada's dim cursor only).
 
-### 4. Slower, human-varied pen
+### 4. Slower, human-varied pen ✅
+*Built (D-033):* `penStateAt()` shared by renderer and cursor: minimum-jerk strokes, corner
+slowdown, 80–200 ms pen lifts, ~30 % slower; seeded variation for every mark kind. Tests:
+`ink.test.ts` (variety, enclosure, timing), `snap.test.ts` (enclosure for any seed).
 * Shapes come from `inkShapes`, seeded, in `src/shared/ink-geometry.ts`. Timing comes from
   `drawDurationFor` (0.75 ms/px, clamped to 320–1300 ms; text 55 ms/char).
 * About 30% slower overall. Use a minimum-jerk speed profile per stroke, slower into corners, and
@@ -211,7 +232,10 @@ Target:
   polyline) while staying within the target tolerance. Add a timing test. Pointing and
   calibration e2e must still pass.
 
-### 5. Pointer-only gestures
+### 5. Pointer-only gestures ✅
+*Built (D-034):* `move_cursor` tool + `hover | follow_line | sweep` beats, `gestures.ts`,
+prompt and planner guidance (gestures first, ink sparingly), demo tutor turn. Tests:
+`gestures.test.ts`, e2e 12 (1×, 2×), e2e 04 (gesture beats timed to the words).
 * Add cursor-only beats: `follow_line` (glide along a line of text at reading speed while she
   talks about it), `hover` (rest on a target with no ring and no label) and `sweep` (move down a
   list of lines).
@@ -224,7 +248,10 @@ Target:
 * Tests: e2e checks that the cursor visits the target line's x-range over time while no ink item
   is created. Unit-test the beat scheduling.
 
-### 6. A real Mac app (Dock)
+### 6. A real Mac app (Dock) ✅
+*Built (D-035, D-036):* `npm run app` (scripts/build-app.mjs), no `LSUIElement`, Dock + app
+menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.ts`,
+`settings-v2.test.ts`; `electron-builder --mac dir --arm64` checked on Linux.
 * Add `npm run app`, which runs on the owner's Mac:
   * `electron-vite build`;
   * `electron-builder --mac --dir --arm64|--x64` (host arch) with `mac.identity: null`;
@@ -247,21 +274,39 @@ Target:
   `LSUIElement`), the icon, and the asar unpack of natives. A real launch needs the Mac:
   BLOCKERS.md item.
 
-### 7. Test, review, iterate (the owner asked for "a bunchhh")
+### 7. Test, review, iterate (the owner asked for "a bunchhh") ✅
 * After each item, run `npm run typecheck && npm test` and the relevant e2e, then **look at the
   screenshots** in `test/artifacts/`. Repeat until it's right.
 * At the end, run the full `npm run test:e2e`. Update PROGRESS.md (a "Round 2" section), the
   README demo script and screenshots, and DECISIONS.md. Commit and push.
+
+## Findings this round (for whoever picks this up next)
+
+* **OCR stalls on few cores:** parallel tesseract passes need `OMP_THREAD_LIMIT=1` (D-028).
+  Without it every OCR-grounded e2e fails on a 4-core VM while looking like a pointing bug.
+* **Cursor timeline:** segments are scheduled on the wall clock and animated by the overlays;
+  holds are main-only (overlays just wait), so the overlay must report "where the previous
+  segment ended" in gaps (fixed in both copies of `positionAt`).
+* **Screenshots under Xvfb:** the root capture can contain a stale copy of the overlays; the
+  harness hides overlay content while it grabs the screen underneath.
+* **Text widths:** measure, don't guess — Caveat is ~0.34 em/char on phrases, Inter 600 ~0.50.
+
+## What could come next (not requested yet)
+
+* The real Live model's balance of gestures vs ink with a key (prompt tuning, B-5).
+* A stable signing certificate by default (permissions survive rebuilds), or a notarized DMG.
+* Cursor presence tuning from real use (idle 35 %, near 12 %, 1.2 s, 60 px are all constants in
+  `src/main/session/cursor.ts`).
 
 ## Environment notes for the next session
 
 * The e2e suite needs Linux with `Xvfb`, `xcompmgr`, `tesseract-ocr` and `xdotool`, plus
   Electron's runtime libraries (`libnss3`, `libgbm1`, `libasound2`, `libgtk-3-0`…). Install with
   apt if missing. `node scripts/run-e2e.mjs <filter>` runs a subset. `E2E_SCALES=1,2` is the
-  default for 03/05.
+  default for 03, 05 and 12.
 * Fake platform and fake displays are used in tests (`PAIRWISE_FAKE_PLATFORM`, `FAKE_DISPLAYS`
   1× and 2×). `PAIRWISE_MOCK_LIVE` is the local Gemini Live mock; `PAIRWISE_MOCK_SCRIPT=none`
   gives scripted control from tests.
 * `npm install` downloads Electron via `scripts/ensure-electron.mjs`.
-* The owner runs it on macOS with `npm run dev` today. After item 6:
-  `git pull && npm install && npm run app`.
+* The owner runs it on macOS as a Dock app: `git pull && npm install && npm run app`.
+  `npm run dev` still works for development (separate permissions and keychain entry, B-8).

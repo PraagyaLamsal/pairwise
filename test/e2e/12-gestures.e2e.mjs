@@ -130,6 +130,19 @@ try {
   const presence = await S(() => globalThis.__pairwise.session.cursor.presence);
   assert.equal(presence, 'active', 'full strength while it means something');
   await screenShot(app, ids[0], join(artifacts, `p12-${tag}-hover-screen.png`));
+  // --- 4. a typed note, like Tuple's text tool: system font, letter by letter, with a caret ---
+  const r4 = await callTool(app, 'annotate', { items: [{ kind: 'text', text: 'runs your file', target: 'the "Run" button' }] });
+  assert.equal(r4.response.drawn, 1, JSON.stringify(r4.response));
+  const note = await S(() => globalThis.__pairwise.session.ink.all().find((i) => i.kind === 'text'));
+  assert.equal(note.font, 'system', 'typed in the system font by default');
+  assert.equal(note.fontSize, 19);
+  await sleep(Math.max(0, note.revealAt - Date.now()) + note.drawMs * 0.55);
+  await screenShot(app, ids[0], join(artifacts, `p12-${tag}-typing-screen.png`));
+  await sleep(note.drawMs * 0.45 + 900);
+  await screenShot(app, ids[0], join(artifacts, `p12-${tag}-typed-screen.png`));
+  const typedAt = await S(() => globalThis.__pairwise.session.cursor.position);
+  assert.ok(Math.hypot(typedAt.x - note.at.x, typedAt.y - (note.at.y + 14)) < 30, `the cursor rests where it "clicked" to type (${JSON.stringify(typedAt)} vs ${JSON.stringify(note.at)})`);
+
   console.log(`gestures (${tag}): followed ${Math.round(Math.max(...xs) - Math.min(...xs))} px of a ${Math.round(line.width)} px line in ${glideMs} ms; swept lines ${visited}; hovered Run`);
   console.log(`round 2 gestures e2e (${tag}): all checks passed`);
 } finally {

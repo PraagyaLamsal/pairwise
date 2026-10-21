@@ -125,3 +125,12 @@ Details and evidence are in HANDOFF.md under "Research so far". In short:
 * Text annotations are typed system-font text in the participant colour, with no bubble.
 * The highlight click is a dot that becomes an expanding thin ring. *Inference:* its line width
   goes from 6 to 3 pt as it animates.
+
+**What Pairwise took from it (round 2, D-029 to D-031):** a flat 5.5 px brush with round caps and
+joins and midpoint quadratic smoothing for every mark; a click is a dot; no glow or pressure;
+typed notes in the system font, semibold, with a caret and a dotted outline while typing; the
+highlight click as a dot that becomes a ring thinning from 6 to 3 px over two ~0.9 s pulses; and,
+from watching how a person's cursor behaves on a call, a cursor that stays where it was left,
+shows its name only when joining, and fades back when unused. The fade-out timing of finished
+ink (Tuple: everything fades together a little after drawing stops) maps onto Pairwise's existing
+"after it talks" setting.
