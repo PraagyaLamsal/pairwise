@@ -54,8 +54,9 @@ your machine (the README demo script walks through each):
 * polish: a Wi-Fi drop mid-session (turn Wi-Fi off for ~20 s): the pill should say
   "reconnecting…" and the session continue;
 * polish: **sticky ink** in your own editor and browser — ask for a trace, then scroll with the
-  trackpad (the marks should catch up within about a quarter of a second), switch apps (they
-  should hide after about a second) and switch back (they should come back). With marks up on a still screen, the "Pairwise Helper"
+  trackpad (the marks should catch up within about a quarter of a second), drag the editor
+  window by its title bar (they should go with it), switch apps (they should hide after about a
+  second) and switch back (they should come back). With marks up on a still screen, the "Pairwise Helper"
   processes in Activity Monitor should stay about as low as without marks (if not, turn it off
   in Settings → Cursor & ink and tell me);
 * real Gemini Live audio (voice, interruption, captions) — needs B-1;

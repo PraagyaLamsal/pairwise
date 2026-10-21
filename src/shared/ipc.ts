@@ -248,6 +248,8 @@ export interface TrackResult {
   key: string;
   state: 'steady' | 'moved' | 'gone' | 'unsure' | 'back';
   dy: number;
+  /** moved, back: sideways too (a dragged window, a sideways scroll). */
+  dx?: number;
   /** moved: anchors (indices) whose content didn't come along — it scrolled out of view. */
   lost?: number[];
   /** Parked marks whose line is back in view. */

@@ -31,6 +31,9 @@ keep it current: tick items, add findings, record decisions in DECISIONS.md.
   The hub got a screenshot tour too (D-047).
 * **All of round 2 is merged into `main`** (PR #1, at the owner's request, 2026-10-21). Work
   after that goes on a branch from `main` and in again by PR.
+* **Then: sticky ink follows a dragged window** (D-048), and a sideways scroll: a 2-D search runs
+  when nothing is where it was and no vertical scroll explains it. e2e `16-sticky` drags the
+  window too.
 
 ## Fixed since: sticky ink drifted after a big scroll
 
@@ -355,9 +358,9 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
   `src/main/session/prompts.ts`.
 * Battery on a real Mac (Activity Monitor during an idle session), and Reduce motion with the
   system setting on.
-* Sticky ink could also follow horizontal scrolls and dragged windows (a 2-D search; today
-  those clear the marks), and find parked marks again when everything in their group had
-  scrolled out of view (today they come back only while part of the group stays in view).
+* Sticky ink could find parked marks again when everything in their group had scrolled out of
+  view (today they come back only while part of the group stays in view, or after the group
+  counts as gone and is found again), and follow a window dragged to another display.
 
 ## Environment notes for the next session
 

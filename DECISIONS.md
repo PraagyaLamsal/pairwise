@@ -509,8 +509,7 @@ scaled down on the GPU; the full comparison runs only when that look changes —
 and dropped: it relied on frame callbacks in a hidden window, which macOS might not deliver,
 to save a fraction of a percent of CPU.)
 Paused vision turns it off too (no looking at the screen at all), and so does Settings →
-Cursor & ink → "Keep drawings with what they mark". Horizontal scrolling and windows being
-dragged aren't followed (the marks clear instead).
+Cursor & ink → "Keep drawings with what they mark". Dragged windows and sideways scrolls: D-048.
 
 
 ### D-047 · Hub fixes from a screenshot tour
@@ -525,3 +524,24 @@ dragged aren't followed (the marks clear instead).
   chevron sat mid-box. A set width now wins.
 - **What's new** has six short items (two lines each at most), so the card doesn't push the
   courses below the fold.
+
+### D-048 · Sticky ink follows a dragged window (and a sideways scroll)
+Dragging the editor across the screen used to hide Ada's marks: the tracker only searched up
+and down. Now, when none of a group is where it was and no vertical scroll explains it, the
+engine searches the whole screen in two dimensions:
+- the marked areas as 8×8-pixel block means (16 DIP) against the screen at every offset,
+  keeping the best six (at least two blocks apart);
+- 4×4 blocks around each, then single pixels around the best three, then quarter pixels
+  vertically. Sideways moves are whole pixels (one is half a DIP).
+It's taken only if most of the group matches there (the share needed for any move), no other
+place comes within 0.1, the move is at least 2 px sideways (anything less is the vertical
+search's), and it fits far better than not moving at all. So another window where the code
+was stays "changed", rather than a look-alike somewhere else. The marks glide there like after a
+scroll, with the turn's marks still to come and her cursor; a group that went away (another
+app) is looked for the same way, so it comes back even if its window was moved meanwhile.
+Parked lines and the snap against the first look keep a sideways offset too.
+Cost: the 2-D search runs only when the vertical one has failed with nothing in place: about
+8 ms on top of the ~10 ms vertical search for a 720×450 capture (a drag of one second costs
+four of them). While a group is away, its looks count as quiet, so after 2 s they're taken half
+as often. Windows dragged to another display aren't followed (each display is its own stream).
+

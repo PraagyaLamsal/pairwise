@@ -276,7 +276,7 @@ export class ScreenCapture {
     const mask = maskOf(w, h, [...masks, ...movingAreas(this.history, GRID_W, GRID_H, b)].map(px));
     const out = groups.map((g) => {
       const r = this.tracker.step(g.key, gray, mask, g.anchors.map(px), g.ids, (g.parked ?? []).map((p) => ({ id: p.id, box: px(p.anchor) })), Boolean(g.away));
-      return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.lost?.length ? { lost: r.lost } : {}), ...(r.back ? { back: r.back } : {}), ...(r.forget ? { forget: r.forget } : {}) };
+      return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.dx ? { dx: r.dx / TRACK_SCALE } : {}), ...(r.lost?.length ? { lost: r.lost } : {}), ...(r.back ? { back: r.back } : {}), ...(r.forget ? { forget: r.forget } : {}) };
     });
     trackDump()?.push({ t: Date.now(), w, h, gray: gray.data, mask, groups: groups.map((g) => ({ key: g.key, boxes: g.anchors.map(px), ids: g.ids, parked: (g.parked ?? []).map((p) => ({ id: p.id, box: px(p.anchor) })), away: Boolean(g.away) })), results: out });
     return out;

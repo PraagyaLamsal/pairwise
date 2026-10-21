@@ -64,6 +64,7 @@ describe('sticky ink: following what the marks point at', () => {
       expect(v.state, `scrolled ${d}`).toBe('moved');
       // Half a pixel at half a pixel per DIP: within a DIP of the real scroll.
       expect(Math.abs(v.dy - d), `scrolled ${d} → ${v.dy}`).toBeLessThanOrEqual(0.5);
+      expect(v.dx, `scrolled ${d}: nothing sideways`).toBe(0);
     }
   });
 
@@ -328,6 +329,71 @@ describe('sticky ink: a group whose content goes away', () => {
     const t = new InkTracker();
     const m = none(codeScreen(7));
     expect(t.step('g', codeScreen(7), m, lines([42]), [], [], true).state).toBe('unsure');
+  });
+});
+
+describe('sticky ink: a dragged window', () => {
+  /** A window of code (`seed`, scrolled by `offset`) at (x, y) on a plain desktop. */
+  function desktop(seed: number, x: number, y: number, offset = 0, w = 480, h = 320): Gray {
+    const win = codeScreen(seed, offset, 280, 180);
+    const data = new Uint8Array(w * h).fill(96);
+    for (let r = 0; r < win.height; r++) {
+      for (let c = 0; c < win.width; c++) {
+        const X = x + c;
+        const Y = y + r;
+        if (X >= 0 && Y >= 0 && X < w && Y < h) data[Y * w + X] = win.data[r * win.width + c];
+      }
+    }
+    return { width: w, height: h, data };
+  }
+  // Three lines of the window at (40, 50).
+  const boxes = lines([92, 104, 116], 46, 200);
+  const m = none(desktop(7, 40, 50));
+
+  it('the marks go with it, sideways too', () => {
+    const ref = desktop(7, 40, 50);
+    for (const [dx, dy] of [[40, 25], [-30, 10], [60, 0], [-15, -35], [3, 2]]) {
+      const v = judge(ref, m, desktop(7, 40 + dx, 50 + dy), m, boxes);
+      expect(v.state, `dragged ${dx},${dy}`).toBe('moved');
+      expect(v.dx, `dragged ${dx},${dy} → ${v.dx},${v.dy}`).toBe(dx);
+      expect(Math.abs(v.dy - dy), `dragged ${dx},${dy} → ${v.dx},${v.dy}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it("another window where it was isn't taken for it moving", () => {
+    expect(judge(desktop(7, 40, 50), m, desktop(42, 40, 50), m, boxes).state).toBe('changed');
+    expect(judge(desktop(7, 40, 50), m, desktop(42, 90, 70), m, boxes).state).toBe('changed');
+  });
+
+  it('is followed through a drag seen in steps, and lined up exactly once it stops', () => {
+    const t = new InkTracker();
+    let marks = boxes;
+    t.step('g', desktop(7, 40, 50), m, marks);
+    let x = 40;
+    let y = 50;
+    for (const [dx, dy] of [[12, 5], [25, 9], [18, 4]]) {
+      x += dx;
+      y += dy;
+      const r = t.step('g', desktop(7, x, y), m, marks);
+      expect(r.state, `dragged to ${x},${y}`).toBe('moved');
+      marks = marks.map((b) => ({ ...b, x: b.x + (r.dx ?? 0), y: b.y + r.dy }));
+    }
+    for (let i = 0; i < 2; i++) {
+      const r = t.step('g', desktop(7, x, y), m, marks);
+      marks = marks.map((b) => ({ ...b, x: b.x + (r.dx ?? 0), y: b.y + r.dy }));
+    }
+    expect(marks[0].x).toBe(boxes[0].x + x - 40);
+    expect(Math.abs(marks[0].y - (boxes[0].y + y - 50))).toBeLessThanOrEqual(0.5);
+  });
+
+  it('a group that went away is found again in a window dragged elsewhere', () => {
+    const t = new InkTracker();
+    t.step('g', desktop(7, 40, 50), m, boxes);
+    for (let i = 0; i < GONE_AFTER; i++) t.step('g', desktop(42, 40, 50), m, boxes);
+    const r = t.step('g', desktop(7, 120, 90), m, boxes, [], [], true);
+    expect(r.state).toBe('back');
+    expect(r.dx).toBe(80);
+    expect(Math.abs(r.dy - 40)).toBeLessThanOrEqual(0.5);
   });
 });
 
