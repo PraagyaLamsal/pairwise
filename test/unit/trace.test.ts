@@ -8,7 +8,8 @@ import { lineEnd, type Bitmap } from '../../src/main/vision/snap';
 
 // visual.ts pulls in Electron through its feature imports; the pure helpers are what we test.
 vi.mock('electron', () => ({ ipcMain: { on() {} }, app: { isPackaged: false }, nativeImage: {} }));
-const { beatSequence, chainChips, demoTrace, replacedChips } = await import('../../src/main/session/features/visual');
+const { beatSequence, chainChips, demoTrace, endInGutter, replacedChips } = await import('../../src/main/session/features/visual');
+const { gestureSteps } = await import('../../src/main/session/gestures');
 const { ExplanationPlanner } = await import('../../src/main/vision/planner');
 const { InkRenderer } = await import('../../src/renderer/ui/ink-render');
 
@@ -261,5 +262,28 @@ describe('planned traces', () => {
     expect(prompt).toContain('like a debugger');
     expect(prompt).toContain('n = 3');
     expect(prompt).toContain('at most 8 beats');
+  });
+});
+
+describe('the end of a trace', () => {
+  it("leaves her cursor in the gutter of the last line it ran, clear of the values", () => {
+    const line = (y: number) => ({ x: 120, y, width: 200, height: 26 });
+    const chip = (y: number) => ({ ink: { id: `c${y}`, author: 'tutor', kind: 'text', chip: true, text: 'n = 1', at: { x: 334, y: y + 2 }, color: '#2F7BFF', surface: 'screen', revealAt: 0, drawMs: 400, seed: 1 } as InkItem });
+    const beats = endInGutter([
+      { say: 'one', seq: [{ gesture: { style: 'run_line', rect: line(100) } }, chip(100)] },
+      { say: 'two', seq: [{ gesture: { style: 'run_line', rect: line(140) } }, chip(140)] },
+      { say: 'and that is it.', seq: [] },
+    ]);
+    // Added once, after the last value typed, on the last line that ran.
+    const last = beats[1].seq[beats[1].seq.length - 1];
+    expect('gesture' in last && last.gesture).toEqual({ style: 'gutter', rect: line(140) });
+    expect(beats[0].seq).toHaveLength(2);
+    const [fly] = gestureSteps({ style: 'gutter', rect: line(140) });
+    expect(fly.kind).toBe('fly');
+    const to = (fly as { to: { x: number; y: number } }).to;
+    // Left of the text (the arrow's body, ~12 px wide, stays off it), level with the line.
+    expect(to.x + 13).toBeLessThan(120);
+    expect(to.y).toBeGreaterThan(140);
+    expect(to.y).toBeLessThan(140 + 26);
   });
 });

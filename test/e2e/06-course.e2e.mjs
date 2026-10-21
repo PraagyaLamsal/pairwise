@@ -46,7 +46,7 @@ try {
   await hub.setViewportSize({ width: 1060, height: 900 }).catch(() => undefined);
   // Someone who used Pairwise before this version sees what's new, once.
   await hub.waitForSelector('.whats-new', { timeout: 10_000 });
-  assert.equal(await hub.locator('.wn-item').count(), 4, 'four new things');
+  assert.equal(await hub.locator('.wn-item').count(), 6, 'six new things');
   await hub.locator('.whats-new').screenshot({ path: join(artifacts, 'p4-whats-new.png') });
   await hub.click('.whats-new button:has-text("Got it")');
   await waitFor(async () => (await hub.locator('.whats-new').count()) === 0, { label: 'the card goes away' });

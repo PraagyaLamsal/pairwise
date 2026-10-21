@@ -1,6 +1,6 @@
 import type { Point, Rect } from '@shared/geometry';
 import type { InkItem } from '@shared/ink';
-import { CHIP_FONT_SIZE, HAND_FONT, HAND_WEIGHT, MONO_FONT, MONO_WEIGHT, NOTE_FONT, NOTE_WEIGHT, chipBox, inkShapes, partial, penStateAt, polyLength, rng, smoothPath } from '@shared/ink-geometry';
+import { CHIP_FONT_SIZE, HAND_FONT, HAND_WEIGHT, MONO_FONT, MONO_WEIGHT, NOTE_FONT, NOTE_WEIGHT, chipBox, inkShapes, partial, penStateAt, polyLength, ringReach, rng, slideOffset, smoothPath } from '@shared/ink-geometry';
 
 export { rng };
 
@@ -96,6 +96,7 @@ export class InkRenderer {
         continue;
       }
       if (now < i.revealAt + i.drawMs + 450) return now;
+      if (i.slide && !this.reducedMotion && now < i.slide.at + i.slide.ms) return now;
       if (i.fadeAt != null) {
         if (now < i.fadeAt) next = Math.min(next, i.fadeAt);
         else if (now < i.fadeAt + (i.fadeMs ?? FADE_MS)) return now;
@@ -134,6 +135,9 @@ export class InkRenderer {
       const ms = now - item.revealAt;
       ctx.save();
       ctx.globalAlpha = fade;
+      // What it marks just scrolled: glide after it (a jump with Reduce motion).
+      const off = this.reducedMotion ? null : slideOffset(item, now);
+      if (off && (off.x || off.y)) ctx.translate(off.x, off.y);
       switch (item.kind) {
         case 'text':
           if (item.chip) this.drawChip(ctx, item, ms, dpr);
@@ -328,7 +332,7 @@ export class InkRenderer {
   private drawRing(ctx: CanvasRenderingContext2D, item: InkItem, now: number, _dpr: number): void {
     const c = item.at ?? (item.rect ? { x: item.rect.x + item.rect.width / 2, y: item.rect.y + item.rect.height / 2 } : null);
     if (!c) return;
-    const reach = item.rect ? Math.min(48, Math.max(26, Math.max(item.rect.width, item.rect.height) / 2 + 12)) : 30;
+    const reach = ringReach(item);
     if (this.reducedMotion) {
       // One still ring at its full size that fades in (and out, unless it's waiting for a click).
       const ms = now - item.revealAt;

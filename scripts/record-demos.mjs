@@ -1,7 +1,7 @@
 // Records the README's animated demos (docs/screenshots/*.gif) from the real app, the way the
 // e2e tests run it (Linux, private Xvfb display, scripted demo tutor, OCR standing in for
 // Gemini). Needs Xvfb, xcompmgr, tesseract, ffmpeg and python3 with Pillow.
-//   node scripts/record-demos.mjs [scene]      scenes: trace, gestures, showme, pen
+//   node scripts/record-demos.mjs [scene]      scenes: trace, gestures, showme, pen, sticky
 //
 // The overlay's own frames are recorded as it paints them (beginFrameSubscription), laid over
 // one capture of the screen underneath, so the motion is smooth however slow screen capture is.
@@ -35,7 +35,7 @@ const IDE = `<!doctype html><html><body style="margin:0;font-family:DejaVu Sans,
 
 <span data-t="line6">print(factorial(2))</span></pre></body></html>`;
 
-async function session() {
+async function session(html = IDE, size = { width: 860, height: 440 }) {
   const { app } = await launch({ PAIRWISE_GROUNDER: 'ocr', PAIRWISE_MOCK_SCRIPT: 'none' });
   const S = (fn, arg) => main(app, fn, arg);
   const courseId = await S(() => {
@@ -44,7 +44,7 @@ async function session() {
     return p.courses.create({ code: 'COMP 1405', name: 'Intro to CS' }).id;
   });
   const d1 = FAKE_DISPLAYS[0];
-  const win = await openTargetWindow(app, { x: d1.bounds.x + 70, y: d1.bounds.y + 90, width: 860, height: 440, html: IDE });
+  const win = await openTargetWindow(app, { x: d1.bounds.x + 70, y: d1.bounds.y + 90, ...size, html });
   pointer.move(d1.bounds.x + 760, d1.bounds.y + 600);
   await S((_e, id) => globalThis.__pairwise.session.start({ courseId: id }), courseId);
   await waitFor(() => S(() => globalThis.__pairwise.session.snapshot.status === 'live'), { label: 'live' });
@@ -81,6 +81,16 @@ async function record(app, displayId, region) {
   }, { displayId, region });
   return {
     pointer: [],
+    windows: [],
+    /** The window under the overlay changed (scrolled): capture it, to lay over the background. */
+    async window(win) {
+      const shot = await app.evaluate(async (_e, id) => {
+        const w = globalThis.__targets.find((x) => x.id === id);
+        const b = w.getContentBounds();
+        return { b, png: (await w.webContents.capturePage()).resize({ width: b.width }).toPNG().toString('base64') };
+      }, win.id);
+      this.windows.push({ t: Date.now(), x: shot.b.x - region.x, y: shot.b.y - region.y, png: shot.png });
+    },
     async stop(name, { fps = 20, width = 720 } = {}) {
       const rec = await app.evaluate((_e, id) => {
         globalThis.__pairwise.session.overlays.windowFor(id).webContents.endFrameSubscription();
@@ -94,7 +104,11 @@ async function record(app, displayId, region) {
         writeFileSync(join(dir, `o${i}.png`), Buffer.from(f.png, 'base64'));
         return { t: f.t - rec.t0, file: `o${i}.png` };
       });
-      writeFileSync(join(dir, 'index.json'), JSON.stringify({ frames: index, duration: rec.t1 - rec.t0, region, pointer: this.pointer.map((p) => ({ t: p.t - rec.t0, x: p.x - region.x, y: p.y - region.y, click: p.click })) }));
+      const windows = this.windows.map((w, i) => {
+        writeFileSync(join(dir, `w${i}.png`), Buffer.from(w.png, 'base64'));
+        return { t: w.t - rec.t0, file: `w${i}.png`, x: w.x, y: w.y };
+      });
+      writeFileSync(join(dir, 'index.json'), JSON.stringify({ frames: index, duration: rec.t1 - rec.t0, region, windows, pointer: this.pointer.map((p) => ({ t: p.t - rec.t0, x: p.x - region.x, y: p.y - region.y, click: p.click })) }));
       const r = spawnSync('python3', [join(root, 'scripts', 'compose-demo.py'), dir, join(out, `${name}.gif`), String(fps), String(width)], { stdio: 'inherit' });
       rmSync(dir, { recursive: true, force: true });
       if (r.status !== 0) throw new Error(`composing ${name} failed`);
@@ -119,6 +133,33 @@ async function record(app, displayId, region) {
     },
   };
 }
+
+// A longer file in a scrolling pane, for the sticky-ink demo.
+const LONG = [
+  'def fib(k):',
+  '    """The k-th Fibonacci number."""',
+  '    a, b = 0, 1',
+  '    for _ in range(k):',
+  '        a, b = b, a + b',
+  '    return a',
+  '',
+  'def factorial(n):',
+  '    if n == 0:',
+  '        return 1',
+  '    return n * factorial(n - 1)',
+  '',
+  'class Counter:',
+  '    def __init__(self):',
+  '        self.count = 0',
+  '    def bump(self, by=1):',
+  '        self.count += by',
+  '        return self.count',
+  '',
+  'print(fib(3), factorial(3))',
+];
+const SCROLLING = `<!doctype html><html><body style="margin:0;font-family:DejaVu Sans,Arial,sans-serif;background:#fff;color:#111">
+<div style="padding:10px 16px;background:#eef1f5;border-bottom:1px solid #ccd;font-size:16px">main.py</div>
+<pre id="code" style="margin:0;height:330px;overflow:auto;padding:14px 22px;font:20px/1.5 DejaVu Sans Mono,monospace">${LONG.map((l, i) => `<span data-t="l${i}">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;') || ' '}</span>`).join('\n')}</pre></body></html>`;
 
 const scenes = {
   async trace() {
@@ -181,6 +222,49 @@ const scenes = {
     await rec.move({ x: l2.x + 120, y: l2.y + l2.height / 2 }, 16, true);
     await sleep(3600);
     await rec.stop('demo-show-me', { width: 640 });
+    await app.close();
+  },
+
+  async sticky() {
+    const { app, S, win, d1, displayId } = await session(SCROLLING, { width: 760, height: 380 });
+    const region = { x: d1.bounds.x + 70, y: d1.bounds.y + 90, width: 720, height: 380 };
+    const rec = await record(app, displayId, region);
+    await rec.window(win);
+    // Lines by their box in the latest frame (the OCR stand-in misses `_` and short lines).
+    const box = (r) => S((_e, rr) => {
+      const fr = globalThis.__pairwise.session.modelFrame;
+      const n = (v, o, sz) => Math.round(((v - o) / sz) * 1000);
+      return [n(rr.y, fr.region.y, fr.region.height), n(rr.x, fr.region.x, fr.region.width), n(rr.y + rr.height, fr.region.y, fr.region.height), n(rr.x + rr.width, fr.region.x, fr.region.width)];
+    }, r);
+    const script = [
+      { say: 'fib of three: k is three.', box: await box(win.els.l0), value: 'k = 3' },
+      { say: 'The loop runs three times.', box: await box(win.els.l3), value: '_ = 0, 1, 2' },
+      { say: 'And a ends up as two, which it returns.', box: await box(win.els.l5), value: 'returns 2' },
+    ];
+    await S((_e, sc) => {
+      const s = globalThis.__pairwise.session;
+      s.mock.afterTool.set('trace_code', (r) => ({ segments: (r.script ?? []).map((say) => ({ say })) }));
+      s.mock.speakNow({ segments: [{ tool: 'trace_code', args: { question: 'what does fib(3) return?', script: sc } }] });
+    }, script);
+    await waitFor(() => S(() => [...globalThis.__pairwise.session.ink.all()].filter((i) => i.chip).length >= 3), { label: 'trace drawn', timeout: 40_000 });
+    await waitFor(() => S(() => !globalThis.__pairwise.session.turn && !globalThis.__pairwise.session.playback.playing), { label: 'spoken', timeout: 40_000 });
+    await sleep(1200);
+    // The student scrolls down a few lines, then back up a bit: her marks come along.
+    const scroll = async (from, to, ms) => {
+      const n = Math.max(2, Math.round(ms / 40));
+      for (let i = 1; i <= n; i++) {
+        const t = i / n;
+        const v = Math.round(from + (to - from) * (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2));
+        await S((_e, o) => globalThis.__targets.find((w) => w.id === o.id).webContents.executeJavaScript(`document.getElementById('code').scrollTop = ${o.v}`), { id: win.id, v });
+        await rec.window(win);
+        await sleep(25);
+      }
+    };
+    await scroll(0, 120, 700);
+    await sleep(2200);
+    await scroll(120, 45, 500);
+    await sleep(2200);
+    await rec.stop('demo-sticky', { width: 640 });
     await app.close();
   },
 

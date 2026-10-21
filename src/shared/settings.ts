@@ -43,6 +43,8 @@ export interface Settings {
   noteStyle: NoteStyle;
   inkFade: InkFade;
   inkFadeDelaySec: number;
+  /** Marks move with what they mark when the student scrolls, and clear when it's gone. */
+  stickyInk: boolean;
   autoPauseMedia: AutoPauseMedia;
   celebrate: boolean;
   sounds: boolean;
@@ -120,6 +122,7 @@ export function defaultSettings(): Settings {
     noteStyle: 'typed',
     inkFade: 'after-speech',
     inkFadeDelaySec: 6,
+    stickyInk: true,
     autoPauseMedia: 'smart',
     celebrate: true,
     sounds: true,

@@ -59,6 +59,9 @@ async function handle(cmd: EngineCommand): Promise<void> {
     case 'setLiveCapture':
       capture.setLive(cmd.enabled);
       break;
+    case 'trackInk':
+      ipc.send('engine:reply', { requestId: cmd.requestId, ok: true, track: capture.trackInk(cmd.displayId, cmd.groups, cmd.masks) });
+      break;
     case 'captureNow': {
       const frame = await capture.captureNow(cmd);
       if (frame && cmd.kind !== 'crop') capture.markSent();

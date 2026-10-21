@@ -185,6 +185,9 @@ function LookSection({ s, update }: SectionProps) {
             />
           )}
         </Row>
+        <Row title="Keep drawings with what they mark" help="Scroll and they move with the page; switch to another app and they clear.">
+          <Toggle checked={s.stickyInk} onChange={(stickyInk) => void update({ stickyInk })} />
+        </Row>
         <Row title="Preview" help="Draws a short demo of the cursor and annotations on your screen.">
           <Button size="s" icon="sparkle" onClick={() => void ipc.invoke('diagnostics:previewInk')}>
             Preview on screen

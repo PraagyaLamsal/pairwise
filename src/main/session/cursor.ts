@@ -280,6 +280,18 @@ export class CursorEngine extends EventEmitter {
     this.schedule([{ kind: 'fly', to: target, label, maxMs: 420 }], now, label ?? this.pendingLabel ?? undefined);
   }
 
+  /**
+   * What she's pointing at moved (the student scrolled): drop what's left of the current moves
+   * and glide along with it. The next beat's moves start from there.
+   */
+  follow(dx: number, dy: number): void {
+    if (this.mode === 'hidden' || this.mode === 'driving') return;
+    const now = Date.now();
+    const p = this.positionAt(now);
+    if (this.segments.length) this.cancelFuture(now);
+    this.schedule([{ kind: 'fly', to: { x: p.x + dx, y: p.y + dy }, maxMs: 200 }], now);
+  }
+
   /** Drop everything scheduled after `now` (interruption). Ink the overlays already drew stays. */
   cancelFuture(now = Date.now()): void {
     if (!this.segments.length) return;

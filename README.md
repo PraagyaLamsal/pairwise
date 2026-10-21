@@ -16,7 +16,9 @@ Ask what your code actually does and she **traces it like a debugger, on your ow
 cursor steps through the lines as they run while she talks, and the values appear right after
 each line (`n = 3`, `returns 6`), updating in place as a loop or a recursive call goes round.
 And to check you've really got it, she sometimes asks you to **show her** — "click the line where
-the recursion stops" — and knows whether you clicked the right spot.
+the recursion stops" — and knows whether you clicked the right spot. Her marks **stay with what
+they mark**: scroll while she explains and they move with your code; switch to another app and
+they clear, instead of pointing at the wrong thing.
 
 Built for macOS (v1), structured so Windows/Linux can follow (`src/main/platform/`). Gemini only.
 
@@ -42,6 +44,8 @@ overlay, cursor and ink are the same.
 | ![Ada steps through factorial(2): value chips appear after each line and update in place](docs/screenshots/demo-trace.gif) | ![Ada sweeps down the function, follows a line, then rests on Run](docs/screenshots/demo-gestures.gif) |
 | **"Show me": she asks you to point at the answer** | **Her pen: Tuple's brush, a human hand, typed notes** |
 | ![Ada asks where the recursion stops; the student clicks the line; nice!](docs/screenshots/demo-show-me.gif) | ![Ada circles Run, underlines the signature, and arrows the base case with a typed note](docs/screenshots/demo-pen.gif) |
+| **Her marks stay with what they mark** | |
+| ![Ada traces fib(3); the student scrolls; the value chips move with their lines](docs/screenshots/demo-sticky.gif) | Scroll while she explains and her chips, circles and arrows come along with the code — the marks still to come land on the right lines too. Switch to another app or tab and they clear. |
 
 | | |
 |---|---|
@@ -53,6 +57,7 @@ overlay, cursor and ink are the same.
 | ![A typed note while typing, then done](docs/screenshots/typed-note.png) | **Typed notes, like Tuple's text tool.** Letter by letter in the system font, with a caret and a dotted outline while she types. (Handwriting is a setting.) |
 | ![Ada's cursor following a line](docs/screenshots/follow-line.png) ![Ada's cursor sweeping down a function](docs/screenshots/sweep.png) | **Her cursor as a pointer.** Most of the time she just points: she follows a line under the text as she reads it, runs down a block line by line, or rests on the thing she means — nothing drawn, no label. |
 | ![Ada traces factorial(2): value chips after each line](docs/screenshots/trace.png) | **She traces your code like a debugger.** "What does this return?" — her cursor skims each line as it runs while she says what happens, and the values appear just after the line's end in small chips. When a line runs again (here the recursive call, `n = 2` → `n = 1`), its value updates in place. |
+| ![Ada's circle and value chip on the code](docs/screenshots/sticky-before.png) ![After scrolling 60 px: both moved with their lines](docs/screenshots/sticky-after.png) | **Her marks stay with what they mark.** While marks are up, Pairwise watches what's under them (on your Mac; nothing extra is sent anywhere). Scroll and they glide to where their lines went, along with her cursor and the marks she hasn't drawn yet; a line that scrolls out of view takes its mark with it. Switch to another app or tab and they fade. A tooltip, your typing, or your pointer on a mark moves nothing. (Settings → Cursor & ink.) |
 | ![Ada asks: click the line where the recursion stops](docs/screenshots/show-me-ask.png) ![The student's click, marked with their ring](docs/screenshots/show-me-answer.png) | **"Show me" questions.** To check you really get it, Ada asks you to point at the answer on your own screen ("click the line where the recursion stops"). Your next click is taken as the answer (it doesn't reach the app underneath), marked with your own ring, and she's told whether it was on the right line or how far off, then reacts. Esc skips. |
 | ![Student circles a line while asking](docs/screenshots/draw-and-ask.png) | **Ask by drawing.** Hold ⌃⌥, talk, and circle something (a click is a dot). Your orange marks, a zoomed crop and your words go to her as one question. |
 | ![One-line step card](docs/screenshots/step-line.png) | **Step by step.** She points at the next thing to click and waits until you do it; the checklist is one line until a step changes or you rest your pointer on it. |
@@ -129,8 +134,8 @@ npm test             # unit + integration (vitest): geometry, Live protocol, gro
 npm run test:e2e     # the real app end to end (Playwright for Electron) against a local Gemini
                      # Live mock: shell, voice, pointing accuracy (1× and 2×), draw-and-ask,
                      # steps, calibration, course brain, takeover, App Veil, whiteboard, notes,
-                     # the quiet screen, cursor gestures and code traces (1× and 2×),
-                     # Reduce motion, and "Show me" questions
+                     # the quiet screen, cursor gestures, code traces and sticky ink
+                     # (1× and 2×), Reduce motion, and "Show me" questions
 npm run eval:grounding   # with GEMINI_API_KEY set: the pointing-accuracy test using real Gemini
 node scripts/record-demos.mjs   # re-record the animated demos above (Linux, needs ffmpeg)
 ```

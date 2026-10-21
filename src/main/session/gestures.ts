@@ -7,7 +7,7 @@ import { pointTip } from './marks';
  * resting on something while talking about it, gliding under a line while reading it, running
  * down a list line by line — with nothing drawn and no label.
  */
-export type GestureStyle = 'hover' | 'follow_line' | 'sweep' | 'run_line';
+export type GestureStyle = 'hover' | 'follow_line' | 'sweep' | 'run_line' | 'gutter';
 
 export interface Gesture {
   style: GestureStyle;
@@ -59,6 +59,14 @@ export function hoverTip(r: Rect): Point {
   return { x: tip.x + Math.min(r.width * 0.18, 12), y: r.y + r.height * 0.74 };
 }
 
+/**
+ * Just left of a line, like a debugger's current-line arrow in the gutter: where a trace leaves
+ * her cursor, pointing at the line it stopped on and clear of every value beside the lines.
+ */
+export function gutterPoint(r: Rect): Point {
+  return { x: r.x - 18, y: r.y + r.height / 2 - 3 };
+}
+
 /** The cursor moves for a gesture: travel to where it starts, then the gesture itself. */
 export function gestureSteps(g: Gesture): CursorStep[] {
   if (g.path && g.path.length >= 2 && !g.rect) {
@@ -78,6 +86,8 @@ export function gestureSteps(g: Gesture): CursorStep[] {
         { kind: 'glide', path, ms: followMs(g.rect), style: 'read' },
       ];
     }
+    case 'gutter':
+      return [{ kind: 'fly', to: gutterPoint(g.rect), maxMs: 420 }];
     case 'run_line': {
       // A trace moving onto the next line to run: a quick skim along it, ending where its value goes.
       const path = followPath(g.rect);

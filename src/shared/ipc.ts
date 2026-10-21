@@ -162,7 +162,7 @@ export interface SendMap {
   'engine:vad': { speaking: boolean; at: number };
   'engine:playback': PlaybackStatus;
   'engine:frame': EncodedFrame;
-  'engine:reply': { requestId: string; ok: boolean; error?: string; frame?: EncodedFrame; frames?: EncodedFrame[] };
+  'engine:reply': { requestId: string; ok: boolean; error?: string; frame?: EncodedFrame; frames?: EncodedFrame[]; track?: TrackResult[] };
   'engine:log': { level: 'info' | 'warn' | 'error'; message: string };
   'hub:log': { level: 'info' | 'warn' | 'error'; message: string };
 }
@@ -227,6 +227,24 @@ export interface CaptureSourceSpec {
   sourceSize?: { width: number; height: number };
 }
 
+/** Sticky ink: one group of marks for the engine to follow on screen (global DIP). */
+export interface TrackGroup {
+  key: string;
+  /** What the marks are about: the content under and beside them. */
+  anchors: Rect[];
+  /** The mark each anchor belongs to. */
+  ids: string[];
+}
+
+/** Where a group's content is now: still there, moved by `dy` (DIP, + = down), or gone. */
+export interface TrackResult {
+  key: string;
+  state: 'steady' | 'moved' | 'gone' | 'unsure';
+  dy: number;
+  /** moved: anchors (indices) whose content didn't come along — it scrolled out of view. */
+  lost?: number[];
+}
+
 export type EngineCommand =
   | { type: 'startAudio'; echoCancellation: boolean; playbackRate: number }
   | { type: 'stopAudio' }
@@ -243,6 +261,8 @@ export type EngineCommand =
   | { type: 'setActiveDisplay'; displayId: string }
   | { type: 'setVeil'; rects: { displayId: string; rects: Rect[] }[] }
   | { type: 'setLiveCapture'; enabled: boolean }
+  /** Sticky ink: compare each group's anchors with how they looked (masks: pixels to skip). */
+  | { type: 'trackInk'; requestId: string; displayId: string; groups: TrackGroup[]; masks: Rect[] }
   | {
       type: 'captureNow';
       requestId: string;

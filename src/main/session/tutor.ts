@@ -22,6 +22,7 @@ import { VeilFeature } from './features/veil';
 import { WhiteboardFeature } from './features/whiteboard';
 import { NotesFeature } from './features/notes';
 import { QuizFeature } from './features/quiz';
+import { StickyInk } from './features/sticky';
 import type { CalReport } from '../vision/calibration';
 import { GeminiRest } from '../gemini/rest';
 import { liveUrl, type FunctionCall, type LiveSetup } from '../gemini/live';
@@ -90,6 +91,7 @@ export class TutorSession extends SessionController {
   readonly sessionNotes: NotesFeature;
   /** "Show me": ask_to_point takes the student's click as their answer. */
   readonly quiz: QuizFeature;
+  readonly sticky: StickyInk;
   /** The notes for the last session, while they are being written (tests await it). */
   notesWriting: Promise<void> | null = null;
   private lastQuestionFrameAt = 0;
@@ -134,6 +136,7 @@ export class TutorSession extends SessionController {
     this.whiteboard = new WhiteboardFeature(this);
     this.sessionNotes = new NotesFeature(this);
     this.quiz = new QuizFeature(this);
+    this.sticky = new StickyInk(this);
   }
 
   demoMode(): boolean {

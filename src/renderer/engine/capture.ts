@@ -1,12 +1,15 @@
 import type { FrameRef, Point, Rect } from '@shared/geometry';
-import type { CaptureSourceSpec, EncodedFrame } from '@shared/ipc';
+import type { CaptureSourceSpec, EncodedFrame, TrackGroup, TrackResult } from '@shared/ipc';
 import { ipc } from '../ui/ipc';
+import { InkTracker, grayFromRGBA, maskOf, movingAreas, type PxBox } from './ink-track';
 
 const GRID_W = 64;
 const GRID_H = 36;
 const SAMPLE_MS = 500;
 const MIN_LIVE_INTERVAL_MS = 1000; // Live API accepts at most 1 frame per second
 const CHANGE_CELLS = 0.004; // fraction of grid cells that must change to count as "screen changed"
+/** Sticky ink compares the screen at half a pixel per DIP. */
+const TRACK_SCALE = 0.5;
 
 interface Source {
   spec: CaptureSourceSpec;
@@ -54,6 +57,8 @@ export class ScreenCapture {
   stop(): void {
     if (this.timer) window.clearInterval(this.timer);
     this.timer = null;
+    this.tracker.clear();
+    this.trackSig = null;
     for (const s of this.sources.values()) s.stream?.getTracks().forEach((t) => t.stop());
     this.sources.clear();
     this.specs.clear();
@@ -184,6 +189,85 @@ export class ScreenCapture {
   }
 
   private prevGrid: Uint8ClampedArray | null = null;
+
+  private tracker = new InkTracker();
+  private trackDisplay = '';
+  private trackCanvas: OffscreenCanvas | null = null;
+  private trackCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private trackSig: Uint8Array | null = null;
+  // GPU-backed on purpose: the video frame is scaled down on the GPU and only the small
+  // result is read back (a CPU canvas would copy the whole screen-sized frame every time).
+  private sigCtx = new OffscreenCanvas(1, 1).getContext('2d')!;
+
+  /** The marked areas (their union) in grey at a quarter pixel per DIP, to see if anything changed. */
+  private signature(src: Source, groups: TrackGroup[]): Uint8Array | null {
+    const b = src.spec.bounds;
+    const all = groups.flatMap((g) => g.anchors);
+    if (!all.length) return null;
+    const x1 = Math.max(b.x, Math.min(...all.map((r) => r.x)));
+    const y1 = Math.max(b.y, Math.min(...all.map((r) => r.y)));
+    const x2 = Math.min(b.x + b.width, Math.max(...all.map((r) => r.x + r.width)));
+    const y2 = Math.min(b.y + b.height, Math.max(...all.map((r) => r.y + r.height)));
+    if (x2 - x1 < 4 || y2 - y1 < 4) return null;
+    const u = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+    const w = Math.max(1, Math.round(u.width / 4));
+    const h = Math.max(1, Math.round(u.height / 4));
+    const c = this.sigCtx.canvas;
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    const area = this.toSource(src, u);
+    this.sigCtx.drawImage(src.video, area.x, area.y, area.width, area.height, 0, 0, w, h);
+    const d = this.sigCtx.getImageData(0, 0, w, h).data;
+    // Where the area is on screen is part of it: a moved area never matches the old one.
+    const out = new Uint8Array(w * h + 4);
+    for (let i = 0; i < w * h; i++) out[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29) >> 8;
+    out.set([x1 & 255, y1 & 255, w & 255, h & 255], w * h);
+    return out;
+  }
+
+  /**
+   * Sticky ink: where each group's content is now, on the display being streamed. Only the
+   * verdicts leave this process (no pixels), and a still screen costs one small look.
+   */
+  trackInk(displayId: string, groups: TrackGroup[], masks: Rect[]): TrackResult[] {
+    const src = this.sources.get(displayId);
+    if (displayId !== this.active || !src?.stream || !src.video.videoWidth) return groups.map((g) => ({ key: g.key, state: 'unsure', dy: 0 }));
+    if (displayId !== this.trackDisplay) {
+      this.tracker.clear();
+      this.trackDisplay = displayId;
+    }
+    this.tracker.retain(new Set(groups.map((g) => g.key)));
+    // Nothing new on screen since the last look: the same verdicts, without looking again.
+    const again = (): TrackResult[] => groups.map((g) => ({ key: g.key, ...this.tracker.again(g.key) }));
+    const known = groups.every((g) => this.tracker.has(g.key));
+    const b = src.spec.bounds;
+    // A quick look first: a small copy of just the marked areas. Unchanged since last time →
+    // nothing to compare, and no need to read back the whole screen.
+    const sig = this.signature(src, groups);
+    const same = sig && this.trackSig && sig.length === this.trackSig.length && sig.every((v, i) => Math.abs(v - this.trackSig![i]) <= 3);
+    this.trackSig = sig;
+    if (known && same) return again();
+    const w = Math.max(1, Math.round(b.width * TRACK_SCALE));
+    const h = Math.max(1, Math.round(b.height * TRACK_SCALE));
+    if (!this.trackCanvas || this.trackCanvas.width !== w || this.trackCanvas.height !== h) {
+      this.trackCanvas = new OffscreenCanvas(w, h);
+      this.trackCtx = this.trackCanvas.getContext('2d');
+    }
+    const ctx = this.trackCtx!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const area = this.toSource(src, b);
+    ctx.drawImage(src.video, area.x, area.y, area.width, area.height, 0, 0, w, h);
+    const gray = grayFromRGBA(ctx.getImageData(0, 0, w, h).data, w, h);
+    const px = (r: Rect): PxBox => ({ x: (r.x - b.x) * TRACK_SCALE, y: (r.y - b.y) * TRACK_SCALE, w: r.width * TRACK_SCALE, h: r.height * TRACK_SCALE });
+    const mask = maskOf(w, h, [...masks, ...movingAreas(this.history, GRID_W, GRID_H, b)].map(px));
+    return groups.map((g) => {
+      const r = this.tracker.step(g.key, gray, mask, g.anchors.map(px));
+      return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.lost?.length ? { lost: r.lost } : {}) };
+    });
+  }
 
   /** Note that main just sent a frame (e.g. a hi-res one), so live sampling respects the 1 fps cap. */
   markSent(): void {

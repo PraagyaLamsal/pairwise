@@ -53,6 +53,11 @@ your machine (the README demo script walks through each):
   Activity Monitor during an idle session;
 * polish: a Wi-Fi drop mid-session (turn Wi-Fi off for ~20 s): the pill should say
   "reconnecting…" and the session continue;
+* polish: **sticky ink** in your own editor and browser — ask for a trace, then scroll with the
+  trackpad (the marks should catch up within about a quarter of a second) and switch apps (they
+  should clear after about a second). With marks up on a still screen, the "Pairwise Helper"
+  processes in Activity Monitor should stay about as low as without marks (if not, turn it off
+  in Settings → Cursor & ink and tell me);
 * real Gemini Live audio (voice, interruption, captions) — needs B-1;
 * ScreenCaptureKit capture with a Retina + external monitor;
 * `Diagnostics → Pointing accuracy` with your key (reports pixel error per display);

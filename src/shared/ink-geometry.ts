@@ -1,4 +1,4 @@
-import type { Point, Rect } from './geometry';
+import { inflateRect, rectCenter, type Point, type Rect } from './geometry';
 import type { CursorFlight, CursorTrace, InkItem } from './ink';
 
 /**
@@ -481,6 +481,122 @@ export function chipBox(item: Pick<InkItem, 'at' | 'text' | 'fontSize'>, chars?:
   const padX = size * 0.52;
   const w = Math.max(h, shown * MONO_EM * size + padX * 2);
   return { x: item.at.x, y: item.at.y, width: w, height: h };
+}
+
+/** How far a highlight click's ring opens around its target. */
+export function ringReach(item: Pick<InkItem, 'rect'>): number {
+  return item.rect ? Math.min(48, Math.max(26, Math.max(item.rect.width, item.rect.height) / 2 + 12)) : 30;
+}
+
+/** A typed or handwritten note's box (a value chip's pill), as the renderer lays it out. */
+export function textExtent(item: InkItem): Rect | null {
+  if (!item.at || !item.text) return null;
+  if (item.chip) return chipBox(item);
+  const size = item.fontSize ?? 19;
+  const full = approxTextWidth(item.text, size, item.font);
+  const wrap = Math.max(220, size * 16);
+  const lines = Math.max(1, Math.ceil(full / wrap));
+  const w = Math.min(full, wrap);
+  const h = size * (item.font === 'hand' ? 1.05 : 1.22) * lines;
+  const x = item.align === 'center' ? item.at.x - w / 2 : item.at.x;
+  const y = item.align === 'center' ? item.at.y - h / 2 : item.at.y;
+  return { x: x - 7, y: y - 6, width: w + 16, height: h + 12 };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sticky ink: what a mark is about, what it covers, and moving it when that content moves
+// ---------------------------------------------------------------------------------------------
+
+const square = (p: Point, r: number): Rect => ({ x: p.x - r, y: p.y - r, width: r * 2, height: r * 2 });
+
+/**
+ * What a mark is about on screen — the content it marks (a circle's target, the line a value
+ * chip belongs to, what an arrow points at) — so it can be followed when that content moves.
+ */
+export function inkAnchor(item: InkItem): Rect | null {
+  if (item.anchor) return inflateRect(item.anchor, 4);
+  switch (item.kind) {
+    case 'circle':
+    case 'box':
+    case 'highlight':
+    case 'underline':
+    case 'bracket':
+    case 'ring':
+      return item.rect ? inflateRect(item.rect, 4) : item.at ? square(item.at, 20) : null;
+    case 'arrow':
+      return item.to ? { x: item.to.x - 44, y: item.to.y - 26, width: 88, height: 52 } : null;
+    case 'text': {
+      const e = textExtent(item);
+      if (!e) return null;
+      // A value chip: the line of code it sits after.
+      return item.chip ? { x: e.x - 340, y: e.y - 2, width: 334, height: e.height + 4 } : e;
+    }
+    case 'check':
+    case 'cross':
+    case 'step':
+      return item.at ? square(item.at, 30) : null;
+    default: {
+      const pts = inkShapes(item).flat();
+      if (!pts.length) return null;
+      const xs = pts.map((p) => p.x);
+      const ys = pts.map((p) => p.y);
+      return inflateRect({ x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }, 8);
+    }
+  }
+}
+
+/**
+ * Boxes over a mark's own pixels (strokes followed point by point, notes and chips by their
+ * box), so screen comparisons can skip the ink where screen captures include it.
+ */
+export function inkCover(item: InkItem): Rect[] {
+  switch (item.kind) {
+    case 'text': {
+      const e = textExtent(item);
+      return e ? [e] : [];
+    }
+    case 'highlight':
+      return item.rect ? [inflateRect(item.rect, 4)] : [];
+    case 'step':
+      return item.at ? [square(item.at, (item.fontSize ?? 26) / 2 + 18)] : [];
+    case 'ring': {
+      const c = item.at ?? (item.rect ? rectCenter(item.rect) : null);
+      return c ? [square(c, ringReach(item) + 4)] : [];
+    }
+    default: {
+      const r = 5 + (item.width ?? 0) / 2;
+      return inkShapes(item).flatMap((pts) => densify(pts, r).map((p) => square(p, r)));
+    }
+  }
+}
+
+/** Where a sliding item is drawn relative to its geometry right now (0 once it has arrived). */
+export function slideOffset(item: Pick<InkItem, 'slide'>, now: number): Point {
+  const s = item.slide;
+  if (!s || s.ms <= 0 || now >= s.at + s.ms) return { x: 0, y: 0 };
+  // Ease out: what's left of the way, (1 − t)³.
+  const left = Math.pow(1 - Math.max(0, (now - s.at) / s.ms), 3);
+  return { x: -s.dx * left, y: -s.dy * left };
+}
+
+/**
+ * The item moved by (dx, dy) because what it marks moved; a drawn one glides there over `ms`
+ * from wherever it is drawn now (even mid-glide), a scheduled one is simply moved.
+ */
+export function shiftInk(item: InkItem, dx: number, dy: number, now: number, ms: number): InkItem {
+  const mv = (p: Point): Point => ({ x: p.x + dx, y: p.y + dy });
+  const out: InkItem = { ...item };
+  if (item.rect) out.rect = { ...item.rect, x: item.rect.x + dx, y: item.rect.y + dy };
+  if (item.anchor) out.anchor = { ...item.anchor, x: item.anchor.x + dx, y: item.anchor.y + dy };
+  if (item.from) out.from = mv(item.from);
+  if (item.to) out.to = mv(item.to);
+  if (item.at) out.at = mv(item.at);
+  if (item.points) out.points = item.points.map(mv);
+  if (ms > 0 && now >= item.revealAt) {
+    const off = slideOffset(item, now);
+    out.slide = { dx: dx - off.x, dy: dy - off.y, at: now, ms };
+  } else delete out.slide;
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------

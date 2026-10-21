@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { InkItem } from '@shared/ink';
+import { shiftInk } from '@shared/ink-geometry';
 import type { InkOp } from '@shared/ipc';
 
 export const FADE_MS = 650;
@@ -37,6 +38,24 @@ export class InkManager extends EventEmitter {
     const changed = items.filter((i) => this.items.has(i.id));
     for (const it of changed) this.items.set(it.id, it);
     if (changed.length) this.emit('op', { op: 'update', items: changed } satisfies InkOp);
+  }
+
+  /**
+   * Move matching items by (dx, dy) because what they mark moved (the student scrolled); drawn
+   * ones glide there over `ms`.
+   */
+  shift(filter: { ids?: string[]; group?: string }, dx: number, dy: number, ms = 180): InkItem[] {
+    const now = Date.now();
+    const moved: InkItem[] = [];
+    for (const [id, it] of this.items) {
+      if (filter.ids && !filter.ids.includes(id)) continue;
+      if (filter.group && it.group !== filter.group) continue;
+      const next = shiftInk(it, dx, dy, now, ms);
+      this.items.set(id, next);
+      moved.push(next);
+    }
+    if (moved.length) this.emit('op', { op: 'update', items: moved } satisfies InkOp);
+    return moved;
   }
 
   /** Remove items immediately (scheduled marks that will never be drawn). */

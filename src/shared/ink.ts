@@ -52,6 +52,16 @@ export interface InkItem {
   width?: number;
   /** Arrow bend: -1..1 (0 = straight). */
   bend?: number;
+  /**
+   * What it marks, where that isn't its own geometry: the line a value chip belongs to, the
+   * target an arrow or a note is about. Sticky ink follows this when the screen moves.
+   */
+  anchor?: Rect;
+  /**
+   * It just moved by (dx, dy) at `at` (what it marks scrolled): drawn gliding there from where
+   * it was over `ms`. Geometry is already at the new place.
+   */
+  slide?: { dx: number; dy: number; at: number; ms: number };
   /** Epoch ms when drawing starts. */
   revealAt: number;
   /** How long the stroke takes to draw itself. */

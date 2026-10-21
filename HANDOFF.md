@@ -21,6 +21,12 @@ keep it current: tick items, add findings, record decisions in DECISIONS.md.
   ridden out for two minutes, and the README has animated demos recorded from the real app
   (`node scripts/record-demos.mjs`). The full e2e suite is 19 runs (13-trace at 1× and 2×,
   14-motion, 15-quiz added).
+* **Then sticky ink** (D-045, D-046): a tour of the whole demo script found cross-feature glitches
+  (fixed: chips off a window's edge, arrow tails on the pill, a "Show me" answer ticking off a
+  step, a covered whiteboard). And Ada's marks now stay with what they mark: the engine follows
+  what's under them (`src/renderer/engine/ink-track.ts`, driven by
+  `src/main/session/features/sticky.ts`), so a scroll moves them (and the turn's marks still to
+  come) and switching apps clears them. e2e `16-sticky` at 1× and 2× (21 runs in all).
 
 ## The owner's requests (verbatim, 2026-10-20)
 
@@ -304,6 +310,14 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
 * **The OCR stand-in** splits low-confidence symbols ("==") onto their own lines; quoted code
   lines are matched by row now, and words Tesseract reads below 30 % confidence are dropped, so
   a test that needs such a line passes its box instead (13-trace does at 2×).
+* **Window stacking under Xvfb + xcompmgr:** a window opened later can be composited *under* the
+  older ones in screen captures even though X stacks it on top (`xwininfo -root -children`
+  says so). Tests that need "something else in front" switch a window's page instead (16-sticky).
+* **Canvas work is software-rendered under Xvfb**, so `drawImage` of a screen-sized video frame
+  costs real CPU here (~10 ms); on a Mac it's a GPU copy. Measure CPU with that in mind.
+* **Sticky ink thresholds** (`ink-track.ts`): scores are relative to each anchor's own texture;
+  half a pixel off is ~0.35 because captures are area-averaged — don't tighten the match
+  threshold below ~0.5 or 1-DIP scrolls start to "clear" marks.
 
 ## What could come next (not requested yet)
 
@@ -316,13 +330,15 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
   `src/main/session/prompts.ts`.
 * Battery on a real Mac (Activity Monitor during an idle session), and Reduce motion with the
   system setting on.
+* Sticky ink could also follow horizontal scrolls and dragged windows (a 2-D search; today
+  those clear the marks), and bring marks back when their content scrolls back into view.
 
 ## Environment notes for the next session
 
 * The e2e suite needs Linux with `Xvfb`, `xcompmgr`, `tesseract-ocr` and `xdotool`, plus
   Electron's runtime libraries (`libnss3`, `libgbm1`, `libasound2`, `libgtk-3-0`…). Install with
   apt if missing. `node scripts/run-e2e.mjs <filter>` runs a subset. `E2E_SCALES=1,2` is the
-  default for 03, 05, 12 and 13. The README demos need `ffmpeg` and Pillow as well.
+  default for 03, 05, 12, 13 and 16. The README demos need `ffmpeg` and Pillow as well.
 * Fake platform and fake displays are used in tests (`PAIRWISE_FAKE_PLATFORM`, `FAKE_DISPLAYS`
   1× and 2×). `PAIRWISE_MOCK_LIVE` is the local Gemini Live mock; `PAIRWISE_MOCK_SCRIPT=none`
   gives scripted control from tests.

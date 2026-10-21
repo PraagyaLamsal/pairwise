@@ -128,6 +128,9 @@ export function valuePosition(line: Rect, text: string, display: Rect, endX?: nu
   return { x: Math.floor(x), y: Math.round(y) };
 }
 
+/** Marks drawn around or on their target rect (it's their geometry and what they're about). */
+const RECT_KINDS = new Set<MarkSpec['kind']>(['circle', 'box', 'highlight', 'underline', 'bracket', 'ring']);
+
 /** Turn located mark specs into ink items (geometry + timing fields; revealAt is set later). */
 export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): InkItem[] {
   const out: InkItem[] = [];
@@ -147,6 +150,8 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
       group: style.group,
       label: s.label,
     };
+    // What a mark is about when that isn't its own outline (sticky ink follows it).
+    if (s.rect && !RECT_KINDS.has(s.kind)) base.anchor = { ...s.rect };
     let item: InkItem | null = null;
     let after: InkItem | null = null;
     switch (s.kind) {

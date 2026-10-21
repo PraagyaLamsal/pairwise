@@ -1,6 +1,6 @@
 import { box2dToGlobal, cropAround, inflateRect, rectCenter, yxToGlobal, type Box2D, type DisplayInfo, type Point, type Rect } from '@shared/geometry';
 import { inkId, type InkItem } from '@shared/ink';
-import { inkPenPoint } from '@shared/ink-geometry';
+import { inkPenPoint, shiftInk } from '@shared/ink-geometry';
 import type { EncodedFrame } from '@shared/ipc';
 import type { TutorSession } from '../tutor';
 import { buildInk, noteFont, pointTip, type MarkSpec, type MarkStyle } from '../marks';
@@ -38,6 +38,8 @@ export class VisualFeature {
   readonly reader: ScreenReader;
   readonly planner: ExplanationPlanner;
   private syncs: BeatSync[] = [];
+  /** Beats not played yet, by the group their marks will belong to (sticky ink moves them). */
+  private waiting: { group: string; seq: BeatStep[] }[] = [];
   /** Tutor ink by the turn it belongs to (faded a while after that turn's speech ends). */
   private turnInk = new Map<string, string[]>();
   /** Copies of each recent turn's marks and when its speech started (to replay them together). */
@@ -268,6 +270,7 @@ export class VisualFeature {
     if (future.length) this.s.ink.remove(future);
     for (const sync of this.syncs) sync.cancel();
     this.syncs = [];
+    this.waiting = [];
     if (this.s.cursor.busyUntil > now) this.s.cursor.cancelFuture(now);
     if (future.length) log.debug(`cancelled ${future.length} pending marks (${reason})`);
   }
@@ -305,6 +308,7 @@ export class VisualFeature {
   private reset(): void {
     for (const sync of this.syncs) sync.cancel();
     this.syncs = [];
+    this.waiting = [];
     this.turnInk.clear();
     this.lastMark = null;
   }
@@ -498,7 +502,7 @@ export class VisualFeature {
       idle();
       if (signal.aborted) return { response: { ok: false } };
       if (!beats.length) return { response: { ok: false, note: 'Could not trace it on screen. Trace it in words, using point_at on each line.' } };
-      this.scheduleSequences(beats);
+      this.scheduleSequences(endInGutter(beats));
       return {
         response: {
           ok: true,
@@ -591,17 +595,50 @@ export class VisualFeature {
 
   /** Located beats: each one's moves and marks start as its words are heard. */
   scheduleSequences(beats: TraceBeat[]): void {
+    const group = this.group();
     const sync = new BeatSync(
-      beats.map((b) => ({
-        text: b.say,
-        start: (pos: number) => {
-          if (!b.seq.length) return;
-          for (const s of b.seq) if ('ink' in s) s.ink.group = this.group();
-          this.perform(b.seq, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS);
-        },
-      })),
+      beats.map((b) => {
+        const entry = { group, seq: b.seq };
+        this.waiting.push(entry);
+        return {
+          text: b.say,
+          start: (pos: number) => {
+            this.waiting = this.waiting.filter((w) => w !== entry);
+            if (!b.seq.length) return;
+            for (const s of b.seq) if ('ink' in s) s.ink.group = this.group();
+            this.perform(b.seq, this.s.clock.timeFor(pos) - SPEECH_LEAD_MS);
+          },
+        };
+      }),
     );
     this.syncs.push(sync);
+  }
+
+  /**
+   * Sticky ink: what a turn marks moved by (dx, dy), so its beats still to come move with it —
+   * and so does the copy kept for replaying the turn.
+   */
+  shiftWaiting(group: string, dx: number, dy: number): void {
+    const now = Date.now();
+    const kept = this.replayable.get(group);
+    if (kept) this.replayable.set(group, kept.map((i) => shiftInk(i, dx, dy, now, 0)));
+    for (const w of this.waiting) {
+      if (w.group !== group) continue;
+      for (const step of w.seq) {
+        if ('ink' in step) {
+          step.ink = shiftInk(step.ink, dx, dy, now, 0);
+          continue;
+        }
+        const g = step.gesture;
+        if (g.rect) g.rect = { ...g.rect, x: g.rect.x + dx, y: g.rect.y + dy };
+        if (g.path) g.path = g.path.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+      }
+    }
+  }
+
+  /** …or it's gone (another app came to the front): the rest of its marks would land on nothing. */
+  dropWaiting(group: string): void {
+    for (const w of this.waiting) if (w.group === group) w.seq.length = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -682,6 +719,20 @@ export type BeatStep = { ink: InkItem } | { gesture: Gesture };
 export interface TraceBeat {
   say: string;
   seq: BeatStep[];
+}
+
+/**
+ * A trace ends with her cursor in the gutter of the line it stopped on, like a debugger's arrow,
+ * rather than resting on the last value it typed (and the one below it).
+ */
+export function endInGutter(beats: TraceBeat[]): TraceBeat[] {
+  for (let i = beats.length - 1; i >= 0; i--) {
+    const last = [...beats[i].seq].reverse().find((st): st is { gesture: Gesture } => 'gesture' in st && Boolean(st.gesture.rect));
+    if (!last) continue;
+    beats[i].seq.push({ gesture: { style: 'gutter', rect: last.gesture.rect } });
+    break;
+  }
+  return beats;
 }
 
 /**

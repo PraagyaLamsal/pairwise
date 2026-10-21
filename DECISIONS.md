@@ -440,3 +440,54 @@ only show when features meet:
   ("3 tries"); it's now a new check.
 - **The whiteboard behind other windows.** Drawing on a board that's open but covered now
   brings it to the front again (without taking focus).
+- **Her cursor on the last value of a trace.** After typing the last chip it rested on it (and
+  half on the chip below, dimmed but in the way). A trace now ends with her cursor in the
+  gutter of the line it stopped on — just left of the code, like a debugger's current-line
+  arrow — so every value stays readable.
+
+### D-046 · Sticky ink: marks stay with what they mark
+Ada's marks used to be glued to the screen: scroll the editor during a trace and every chip
+pointed at the wrong line until it faded; switch to the browser and her circle sat on a web
+page. Now, while marks are up on the screen the student is working on, the engine compares
+what's under each one with how it looked a moment ago, four times a second (two once nothing
+has moved for 2 s):
+- **Scrolled** → the group moves by the same amount and glides there (140 ms; a jump with
+  Reduce motion). The turn's marks still to come move too, and so does her cursor if it was
+  pointing there. Marks whose own line scrolled out of view (under a header, out of the pane)
+  fade; the rest follow.
+- **Gone** (another app or tab, a closed file) → the marks fade rather than point at the wrong
+  thing, and the rest of the turn's marks are dropped. It has to stay changed for ~1 s, so a
+  flicker doesn't clear anything.
+- **A tooltip, a caret, typing, the student's pointer on a mark** → nothing happens.
+
+How: each mark knows what it's about (`InkItem.anchor`: a chip's line, an arrow's or note's
+target, else its own outline). The engine grabs the screen at half a pixel per DIP, in grey,
+and scores each anchor against its earlier look relative to its own texture (identical ≈ 0,
+half a pixel off ≈ 0.35 — captures are area-averaged, so that can't be interpolated away — a
+pixel and a half ≈ 1.1, unrelated content ≥ 1.5). A coarse-to-fine vertical search (whole
+pixels on a subsample, then quarter pixels) finds the scroll, and the group's verdict is a vote
+of its anchors weighted by texture. Details that each fixed a real failure:
+- A part that can't be seen (masked, off the image) is unknown, not a mismatch.
+- A line half under a header that doesn't scroll is still followed: when the plain search can't
+  agree, a second one lets pixels that are unchanged in place count as explained (only for
+  moves of 2 px and more — for tiny ones, a glyph's moved edges would match the glyph itself
+  one pixel along). A mark is "lost" only if its line went off screen or under something that
+  doesn't scroll (where it went, the screen looks as it did).
+- A partial change that holds still (a tooltip that stays, typing) becomes the new reference,
+  so it can't add up to "gone" later; areas that change in every sample (a playing video, an
+  animation — the engine's motion grid) are treated as unknown.
+- Each move is measured to a quarter pixel, and the errors add up over a long scroll; once it
+  settles, the content is found again against how it first looked and the marks snap into
+  place.
+Masked out: the student's pointer and, where captures include Pairwise's own windows
+(everywhere but macOS), the marks themselves, her cursor (and where it just was), the pill and
+the cards. Only verdicts leave the engine, never pixels. Cost: on a still screen, one quick
+look a quarter-second (half a second once nothing has moved for 2 s) at just the marked areas,
+scaled down on the GPU; the full comparison runs only when that look changes — 3 ms steady,
+~10 ms when it has to search. (Skipping even that when no new video frame has arrived was tried
+and dropped: it relied on frame callbacks in a hidden window, which macOS might not deliver,
+to save a fraction of a percent of CPU.)
+Paused vision turns it off too (no looking at the screen at all), and so does Settings →
+Cursor & ink → "Keep drawings with what they mark". Horizontal scrolling and windows being
+dragged aren't followed (the marks clear instead).
+
