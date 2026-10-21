@@ -98,6 +98,11 @@ export class QuizFeature {
     return this.pending !== null;
   }
 
+  /** Drop a question that's waiting (the student started asking something instead). */
+  skip(how: string): void {
+    if (this.pending) this.finish({ clicked: false, how });
+  }
+
   /** The quick checks so far, handed to the session notes (and forgotten here). */
   takeResults(): QuizResult[] {
     const r = this.results;
@@ -125,7 +130,8 @@ export class QuizFeature {
       if (signal.aborted) return { response: { ok: false } };
       if (!result.clicked || !result.point) {
         if (result.how === 'skipped' || result.how === 'timed out') this.results.push({ question, outcome: 'skipped' });
-        return { response: { clicked: false, [result.how === 'timed out' ? 'timed_out' : 'skipped']: true, note: result.how === 'timed out' ? 'No answer yet. Ask whether they want a hint.' : 'They skipped it: give a hint, or show them.' }, scheduling: 'WHEN_IDLE' };
+        const note = result.how === 'timed out' ? 'No answer yet. Ask whether they want a hint.' : result.how === 'skipped' ? 'They skipped it: give a hint, or show them.' : `No answer: ${result.how}. Deal with that first.`;
+        return { response: { clicked: false, [result.how === 'timed out' ? 'timed_out' : 'skipped']: true, note }, scheduling: 'WHEN_IDLE' };
       }
       const p = result.point;
       this.markAnswer(p);

@@ -127,6 +127,17 @@ try {
   assert.deepEqual([r4.clicked, r4.skipped], [false, true], JSON.stringify(r4));
   assert.deepEqual(await answering(), overlays.map(() => false), 'and the screen is back to normal');
 
+  // --- 4b. starting to ask something drops the question (the click is theirs again) ---------
+  const q5 = ask({ question: 'Click the line that calls factorial again' });
+  await waitFor(async () => (await answering()).every(Boolean), { label: 'asking a fifth time', timeout: 10_000 });
+  await S(() => globalThis.__pairwise.session.onAskStart('toggle'));
+  const r5 = (await q5.done).response;
+  assert.deepEqual([r5.clicked, r5.skipped], [false, true], JSON.stringify(r5));
+  assert.ok(/asked something instead/.test(r5.note), r5.note);
+  assert.deepEqual(await answering(), overlays.map(() => false), 'answer mode is off…');
+  assert.equal(await overlays[0].evaluate(() => document.body.classList.contains('drawing')), true, '…and drawing to ask is on');
+  await S(() => globalThis.__pairwise.session.onAskEnd(true));
+
   // --- 5. the checks end up in the session notes; the skipped one is there to review --------
   // (The course page is open while the session ends: it must refresh once the notes are written,
   // which happens a moment after the session is over.)

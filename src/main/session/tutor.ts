@@ -698,6 +698,8 @@ export class TutorSession extends SessionController {
     this.applyGate();
     if (this.playback.playing) this.flushTutor('ask');
     this.visual.cancelPending('student asking');
+    // They'd rather ask something than answer the question waiting for them: skip it.
+    this.quiz.skip('they asked something instead');
     void this.autoPauseMedia();
     this.ask.begin(via);
     // The tutor gets a fresh full-detail look the moment a question starts.
