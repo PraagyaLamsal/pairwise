@@ -62,6 +62,11 @@ export interface InkItem {
    * it was over `ms`. Geometry is already at the new place.
    */
   slide?: { dx: number; dy: number; at: number; ms: number };
+  /**
+   * Parked: hidden since `at` because the line it marks scrolled out of view (it keeps moving
+   * with its group); `on: false` from `at` = back in view, fading in again.
+   */
+  park?: { on: boolean; at: number };
   /** Epoch ms when drawing starts. */
   revealAt: number;
   /** How long the stroke takes to draw itself. */

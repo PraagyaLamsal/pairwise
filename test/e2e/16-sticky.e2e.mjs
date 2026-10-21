@@ -114,6 +114,22 @@ try {
   assert.ok(Math.abs(m.circle.y - (start.circle.y - 25)) <= 2, `settled where the line is (${m.circle.y})`);
   assert.equal(m.circle.fadeAt, null, 'still up');
 
+  // --- 3c. a mark whose line scrolls out of view is parked, and comes back with its line -------
+  const parkState = () => S(() => {
+    const c = globalThis.__pairwise.session.ink.all().find((i) => i.id === 'circle');
+    return c ? { y: c.rect.y, parked: Boolean(c.park?.on), fadeAt: c.fadeAt } : null;
+  });
+  await scrollTo(110);
+  await waitFor(async () => (await parkState())?.parked === true, { label: 'the circle is parked when its line goes under the header', timeout: 5000, interval: 100 });
+  m = await marks();
+  assert.ok(Math.abs(m.chip.y - (start.chip.y - 110)) <= 2, `the chip, still in view, follows (${m.chip.y})`);
+  assert.equal((await parkState()).fadeAt, null, 'parked, not cleared');
+  await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-parked-screen.png`));
+  await scrollTo(25);
+  await waitFor(async () => (await parkState())?.parked === false, { label: 'the circle comes back with its line', timeout: 5000, interval: 100 });
+  const back = await parkState();
+  assert.ok(Math.abs(back.y - (start.circle.y - 25)) <= 2, `back on its line (${back.y} vs ${start.circle.y - 25})`);
+
   // --- 3b. scrolling mid-trace: the chips still to come land on their lines' new places ------
   // (Lines further down the file, so all of them stay in view after the second scroll.)
   await S(() => globalThis.__pairwise.session.ink.clear());
@@ -167,7 +183,7 @@ try {
   await waitFor(async () => (await showing()) === 0, { label: 'the marks clear when what they marked is gone', timeout: 6000, interval: 150 });
   await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-switched-screen.png`));
 
-  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); scrolled mid-trace → later chips on their lines; another page → cleared');
+  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); a line under the header → parked, back with it; scrolled mid-trace → later chips on their lines; another page → cleared');
   console.log(`sticky ink e2e (${d1.scaleFactor}x): all checks passed`);
 } finally {
   await app.close().catch(() => undefined);

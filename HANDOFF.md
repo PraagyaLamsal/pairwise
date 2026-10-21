@@ -331,7 +331,8 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
 * Battery on a real Mac (Activity Monitor during an idle session), and Reduce motion with the
   system setting on.
 * Sticky ink could also follow horizontal scrolls and dragged windows (a 2-D search; today
-  those clear the marks), and bring marks back when their content scrolls back into view.
+  those clear the marks), and find parked marks again when everything in their group had
+  scrolled out of view (today they come back only while part of the group stays in view).
 
 ## Environment notes for the next session
 

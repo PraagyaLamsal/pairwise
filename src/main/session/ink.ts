@@ -58,6 +58,24 @@ export class InkManager extends EventEmitter {
     return moved;
   }
 
+  /**
+   * Park marks (hide them, `on`) whose line scrolled out of view, or bring them back when it's
+   * in view again. Parked marks keep moving with their group.
+   */
+  park(ids: string[], on: boolean): InkItem[] {
+    const now = Date.now();
+    const changed: InkItem[] = [];
+    for (const id of ids) {
+      const it = this.items.get(id);
+      if (!it || Boolean(it.park?.on) === on) continue;
+      const next: InkItem = { ...it, park: { on, at: now } };
+      this.items.set(id, next);
+      changed.push(next);
+    }
+    if (changed.length) this.emit('op', { op: 'update', items: changed } satisfies InkOp);
+    return changed;
+  }
+
   /** Remove items immediately (scheduled marks that will never be drawn). */
   remove(ids: string[]): void {
     const gone = ids.filter((id) => this.items.delete(id));

@@ -223,6 +223,41 @@ describe('sticky ink: a scroll seen in steps', () => {
   });
 });
 
+describe('sticky ink: marks whose line scrolls out of view', () => {
+  const header = (img: Gray) => {
+    for (let y = 0; y < 40; y++) img.data.fill(200, y * img.width, (y + 1) * img.width);
+    return img;
+  };
+
+  it('are parked, and come back when the group brings their line into view again', () => {
+    const t = new InkTracker();
+    const m = none(codeScreen(7));
+    const all = lines([42, 90, 114]);
+    t.step('g', header(codeScreen(7)), m, all, ['A', 'B', 'C']);
+    // Scrolled up 24: A's line goes under the header.
+    const r1 = t.step('g', header(codeScreen(7, -24)), m, all, ['A', 'B', 'C']);
+    expect(r1.state).toBe('moved');
+    expect(r1.lost).toEqual([0]);
+    // (Main moves everything and parks A.)
+    const moved = all.map((b) => ({ ...b, y: b.y + r1.dy }));
+    const parked = [{ id: 'A', box: moved[0] }];
+    const r2 = t.step('g', header(codeScreen(7, -24)), m, moved.slice(1), ['B', 'C'], parked);
+    expect(r2.back).toBeUndefined(); // still under the header
+    // Scrolled back down: A's line is in view again, where the group's move puts it.
+    const r3 = t.step('g', header(codeScreen(7)), m, moved.slice(1), ['B', 'C'], parked);
+    expect(r3.state).toBe('moved');
+    expect(r3.back).toEqual(['A']);
+  });
+
+  it("are let go when there's nothing to recognise their line by", () => {
+    const t = new InkTracker();
+    const m = none(codeScreen(7));
+    t.step('g', codeScreen(7), m, lines([42]), ['B']);
+    const r = t.step('g', codeScreen(7), m, lines([42]), ['B'], [{ id: 'X', box: lines([90])[0] }]);
+    expect(r.forget).toEqual(['X']);
+  });
+});
+
 describe('sticky ink: areas that never stop changing', () => {
   it('a video (cells changing in every sample) is skipped, a scroll (a burst) is not', () => {
     const W = 8;

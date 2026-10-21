@@ -570,6 +570,17 @@ export function inkCover(item: InkItem): Rect[] {
   }
 }
 
+/** How long a parked mark takes to go, and to come back. */
+export const PARK_OUT_MS = 150;
+export const PARK_IN_MS = 240;
+
+/** How visible a mark is for being parked (1 = not parked). */
+export function parkAlpha(item: Pick<InkItem, 'park'>, now: number): number {
+  const p = item.park;
+  if (!p) return 1;
+  return p.on ? Math.max(0, 1 - (now - p.at) / PARK_OUT_MS) : Math.min(1, Math.max(0, (now - p.at) / PARK_IN_MS));
+}
+
 /** Where a sliding item is drawn relative to its geometry right now (0 once it has arrived). */
 export function slideOffset(item: Pick<InkItem, 'slide'>, now: number): Point {
   const s = item.slide;

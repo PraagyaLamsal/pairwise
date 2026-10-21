@@ -1,6 +1,6 @@
 import type { Point, Rect } from '@shared/geometry';
 import type { InkItem } from '@shared/ink';
-import { CHIP_FONT_SIZE, HAND_FONT, HAND_WEIGHT, MONO_FONT, MONO_WEIGHT, NOTE_FONT, NOTE_WEIGHT, chipBox, inkShapes, partial, penStateAt, polyLength, ringReach, rng, slideOffset, smoothPath } from '@shared/ink-geometry';
+import { CHIP_FONT_SIZE, HAND_FONT, HAND_WEIGHT, MONO_FONT, MONO_WEIGHT, NOTE_FONT, NOTE_WEIGHT, PARK_IN_MS, PARK_OUT_MS, chipBox, inkShapes, parkAlpha, partial, penStateAt, polyLength, ringReach, rng, slideOffset, smoothPath } from '@shared/ink-geometry';
 
 export { rng };
 
@@ -97,6 +97,7 @@ export class InkRenderer {
       }
       if (now < i.revealAt + i.drawMs + 450) return now;
       if (i.slide && !this.reducedMotion && now < i.slide.at + i.slide.ms) return now;
+      if (i.park && now < i.park.at + (i.park.on ? PARK_OUT_MS : PARK_IN_MS)) return now;
       if (i.fadeAt != null) {
         if (now < i.fadeAt) next = Math.min(next, i.fadeAt);
         else if (now < i.fadeAt + (i.fadeMs ?? FADE_MS)) return now;
@@ -130,7 +131,7 @@ export class InkRenderer {
   render(ctx: CanvasRenderingContext2D, items: InkItem[], now: number, dpr: number): void {
     for (const item of items) {
       if (now < item.revealAt) continue;
-      const fade = item.fadeAt != null ? Math.max(0, 1 - (now - item.fadeAt) / (item.fadeMs ?? FADE_MS)) : 1;
+      const fade = (item.fadeAt != null ? Math.max(0, 1 - (now - item.fadeAt) / (item.fadeMs ?? FADE_MS)) : 1) * parkAlpha(item, now);
       if (fade <= 0) continue;
       const ms = now - item.revealAt;
       ctx.save();

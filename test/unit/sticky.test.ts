@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { InkItem } from '../../src/shared/ink';
-import { chipBox, inkAnchor, inkCover, shiftInk, slideOffset } from '../../src/shared/ink-geometry';
+import { chipBox, inkAnchor, inkCover, parkAlpha, shiftInk, slideOffset } from '../../src/shared/ink-geometry';
 import { InkManager } from '../../src/main/session/ink';
 
 vi.mock('electron', () => ({ app: { isPackaged: false }, systemPreferences: {} }));
@@ -70,6 +70,27 @@ describe('sticky ink: moving marks with what they mark', () => {
       ['g', ['g']],
     ]);
     expect(groups[0].anchors.length).toBe(2);
+  });
+
+  it('parks a mark (hidden, still in its group) and brings it back', () => {
+    const ink = new InkManager();
+    ink.add([base({ id: 'a', group: 't1', rect: { x: 0, y: 100, width: 40, height: 20 } })]);
+    const [hid] = ink.park(['a'], true);
+    expect(hid.park?.on).toBe(true);
+    expect(parkAlpha(hid, hid.park!.at)).toBe(1);
+    expect(parkAlpha(hid, hid.park!.at + 1000)).toBe(0);
+    expect(ink.park(['a'], true)).toEqual([]); // already parked
+    // Parked marks are looked for, not followed.
+    const groups = trackGroups(ink.all(), { x: 0, y: 0, width: 1440, height: 900 });
+    expect(groups).toEqual([]); // nothing in view to follow the group by
+    ink.add([base({ id: 'b', group: 't1', rect: { x: 0, y: 300, width: 40, height: 20 } })]);
+    const [g] = trackGroups(ink.all(), { x: 0, y: 0, width: 1440, height: 900 });
+    expect(g.ids).toEqual(['b']);
+    expect(g.parked!.map((p) => p.id)).toEqual(['a']);
+    const [shown] = ink.park(['a'], false);
+    expect(parkAlpha(shown, shown.park!.at)).toBe(0);
+    expect(parkAlpha(shown, shown.park!.at + 1000)).toBe(1);
+    ink.dispose();
   });
 
   it('the ink store moves a group and tells the overlays', () => {

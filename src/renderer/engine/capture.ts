@@ -264,8 +264,8 @@ export class ScreenCapture {
     const px = (r: Rect): PxBox => ({ x: (r.x - b.x) * TRACK_SCALE, y: (r.y - b.y) * TRACK_SCALE, w: r.width * TRACK_SCALE, h: r.height * TRACK_SCALE });
     const mask = maskOf(w, h, [...masks, ...movingAreas(this.history, GRID_W, GRID_H, b)].map(px));
     return groups.map((g) => {
-      const r = this.tracker.step(g.key, gray, mask, g.anchors.map(px));
-      return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.lost?.length ? { lost: r.lost } : {}) };
+      const r = this.tracker.step(g.key, gray, mask, g.anchors.map(px), g.ids, (g.parked ?? []).map((p) => ({ id: p.id, box: px(p.anchor) })));
+      return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.lost?.length ? { lost: r.lost } : {}), ...(r.back ? { back: r.back } : {}), ...(r.forget ? { forget: r.forget } : {}) };
     });
   }
 

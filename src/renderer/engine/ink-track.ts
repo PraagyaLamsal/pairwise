@@ -342,6 +342,20 @@ interface GroupState {
   originMask: Uint8Array;
   offset: number;
   synced: boolean;
+  /** Marks whose line went out of view: how that line looked then, and where it was (px). */
+  looks: Map<string, { look: Anchor; y: number }>;
+}
+
+/** What one sample says about a group. */
+export interface StepResult {
+  state: 'steady' | 'moved' | 'gone' | 'unsure';
+  dy: number;
+  /** moved: anchors (indices) whose line went out of view — park those marks. */
+  lost?: number[];
+  /** Parked marks whose line is back where the group's movement says it should be. */
+  back?: string[];
+  /** Parked marks with nothing to recognise their line by (this engine never saw it): let them go. */
+  forget?: string[];
 }
 
 /** Partly changed and then still for this many samples: that's the new normal. */
@@ -404,16 +418,25 @@ export class InkTracker {
   }
 
   /**
-   * One sample for one group: `boxes` are its anchors now, `mask` the pixels to skip in this
-   * image. The first sample just remembers how it looks. `gone` only after it stays changed.
+   * One sample for one group: `boxes` are its anchors now (the marks `ids`), `mask` the pixels to
+   * skip in this image, `parked` the marks hidden because their line went out of view (where
+   * they'd be now). The first sample just remembers how it looks. `gone` only after it stays
+   * changed.
    */
-  step(key: string, cur: Gray, mask: Uint8Array, boxes: PxBox[]): { state: 'steady' | 'moved' | 'gone' | 'unsure'; dy: number; lost?: number[] } {
+  step(key: string, cur: Gray, mask: Uint8Array, boxes: PxBox[], ids: string[] = [], parked: { id: string; box: PxBox }[] = []): StepResult {
     const g = this.groups.get(key);
     if (!g || g.ref.width !== cur.width || g.ref.height !== cur.height) {
-      this.groups.set(key, { ref: cur, refMask: mask, changed: 0, last: 'steady', prev: cur, prevMask: mask, stillFor: 0, origin: cur, originMask: mask, offset: 0, synced: true });
-      return { state: 'steady', dy: 0 };
+      this.groups.set(key, { ref: cur, refMask: mask, changed: 0, last: 'steady', prev: cur, prevMask: mask, stillFor: 0, origin: cur, originMask: mask, offset: 0, synced: true, looks: new Map() });
+      return parked.length ? { state: 'steady', dy: 0, forget: parked.map((p) => p.id) } : { state: 'steady', dy: 0 };
     }
     const v = judge(g.ref, g.refMask, cur, mask, boxes);
+    // A line that went out of view: remember how it looked (in the reference, before the move).
+    if (v.state === 'moved') {
+      for (const k of v.lost) {
+        const look = ids[k] ? prepare(g.ref, g.refMask, boxes[k], k) : null;
+        if (look) g.looks.set(ids[k], { look, y: boxes[k].y });
+      }
+    }
     const still = v.state === 'unsure' && judge(g.prev, g.prevMask, cur, mask, boxes).state === 'steady';
     g.prev = cur;
     g.prevMask = mask;
@@ -430,7 +453,7 @@ export class InkTracker {
     if (v.state === 'moved') {
       g.offset += v.dy;
       g.synced = false;
-      return { state: 'moved', dy: v.dy, lost: v.lost };
+      return { state: 'moved', dy: v.dy, lost: v.lost, ...this.parkedBack(g, cur, mask, parked, v.dy) };
     }
     // Settled after moving: line up exactly with where its content really is now.
     if (v.state === 'steady' && !g.synced) {
@@ -438,9 +461,32 @@ export class InkTracker {
       const fix = resync(g.origin, g.originMask, cur, mask, boxes, g.offset);
       if (fix !== null && Math.abs(fix) >= 0.5) {
         g.offset += fix;
-        return { state: 'moved', dy: fix };
+        return { state: 'moved', dy: fix, ...this.parkedBack(g, cur, mask, parked, fix) };
       }
     }
-    return { state: v.state, dy: v.dy };
+    return v.state === 'steady' ? { state: 'steady', dy: 0, ...this.parkedBack(g, cur, mask, parked, 0) } : { state: v.state, dy: v.dy };
+  }
+
+  /**
+   * Which parked marks' lines are back in view: each one's line, as it looked when it went,
+   * is where the group's movement since puts it (`dy` = this sample's move, not yet applied).
+   */
+  private parkedBack(g: GroupState, cur: Gray, mask: Uint8Array, parked: { id: string; box: PxBox }[], dy: number): { back?: string[]; forget?: string[] } {
+    const back: string[] = [];
+    const forget: string[] = [];
+    for (const p of parked) {
+      const seen = g.looks.get(p.id);
+      // Nothing to recognise it by (never seen here, or a blank line that would match any blank).
+      if (!seen || seen.look.act < 4) {
+        forget.push(p.id);
+        g.looks.delete(p.id);
+        continue;
+      }
+      if (score(seen.look, cur, mask, p.box.y + dy - seen.y) < T_MATCH) {
+        back.push(p.id);
+        g.looks.delete(p.id);
+      }
+    }
+    return { ...(back.length ? { back } : {}), ...(forget.length ? { forget } : {}) };
   }
 }

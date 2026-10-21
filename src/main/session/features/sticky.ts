@@ -25,13 +25,18 @@ export function trackGroups(items: InkItem[], display: Rect, now = Date.now()): 
     if (it.surface !== 'screen' || (it.fadeAt != null && it.fadeAt <= now)) continue;
     const key = it.group ?? it.id;
     const a = inkAnchor(it);
-    if (!a || !rectsIntersect(a, display)) continue;
-    const g = byKey.get(key) ?? { key, anchors: [], ids: [] };
-    g.anchors.push(a);
-    g.ids.push(it.id);
+    if (!a) continue;
+    const g = byKey.get(key) ?? { key, anchors: [], ids: [], parked: [] };
+    // A parked mark's line is out of view: it's looked for, not followed.
+    if (it.park?.on) g.parked!.push({ id: it.id, anchor: a });
+    else if (rectsIntersect(a, display)) {
+      g.anchors.push(a);
+      g.ids.push(it.id);
+    } else continue;
     byKey.set(key, g);
   }
-  return [...byKey.values()].slice(-MAX_GROUPS);
+  // A group with nothing in view can't be followed (its parked marks stay as they are).
+  return [...byKey.values()].filter((g) => g.anchors.length).slice(-MAX_GROUPS);
 }
 
 /**
@@ -135,14 +140,18 @@ export class StickyInk {
       }
       const moved = this.s.ink.shift(this.filter(t.key), 0, dy, prefersReducedMotion() ? 0 : 140);
       this.s.visual.shiftWaiting(t.key, 0, dy);
-      // Marks whose own line scrolled out of view (under a header, past the pane) go.
+      // Marks whose own line scrolled out of view (under a header, past the pane) are parked
+      // until it's back; ones whose line came back into view show again.
       const lost = (t.lost ?? []).map((k) => g.ids[k]).filter(Boolean);
-      if (lost.length) this.s.ink.fade({ ids: lost });
+      if (lost.length) this.s.ink.park(lost, true);
       // Her cursor on one of these marks goes with it.
       const c = this.s.cursor.position;
       if (g.anchors.some((a) => rectContains(inflateRect(a, 40), c))) this.s.cursor.follow(0, dy);
       log.info(`marks ${t.key} moved ${dy} px with the screen (${moved.length})`);
-    } else if (t.state === 'gone') {
+    }
+    if (t.back?.length) this.s.ink.park(t.back, false);
+    if (t.forget?.length) this.s.ink.fade({ ids: t.forget });
+    if (t.state === 'gone') {
       this.s.ink.fade(this.filter(t.key));
       this.s.visual.dropWaiting(t.key);
       log.info(`marks ${t.key} cleared: what they marked has gone`);

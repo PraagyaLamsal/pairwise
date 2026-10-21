@@ -453,8 +453,11 @@ what's under each one with how it looked a moment ago, four times a second (two 
 has moved for 2 s):
 - **Scrolled** → the group moves by the same amount and glides there (140 ms; a jump with
   Reduce motion). The turn's marks still to come move too, and so does her cursor if it was
-  pointing there. Marks whose own line scrolled out of view (under a header, out of the pane)
-  fade; the rest follow.
+  pointing there. A mark whose own line scrolled out of view (under a header, out of the
+  pane) is parked — hidden, still moving with its group — and comes back when its line does:
+  the engine remembers how that line looked and checks for it where the group's movement
+  says it should be. (A group with nothing left in view can't be followed; its parked marks
+  stay hidden.)
 - **Gone** (another app or tab, a closed file) → the marks fade rather than point at the wrong
   thing, and the rest of the turn's marks are dropped. It has to stay changed for ~1 s, so a
   flicker doesn't clear anything.

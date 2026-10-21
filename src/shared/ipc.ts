@@ -234,6 +234,8 @@ export interface TrackGroup {
   anchors: Rect[];
   /** The mark each anchor belongs to. */
   ids: string[];
+  /** Marks hidden because their line went out of view, with where their line would be now. */
+  parked?: { id: string; anchor: Rect }[];
 }
 
 /** Where a group's content is now: still there, moved by `dy` (DIP, + = down), or gone. */
@@ -243,6 +245,10 @@ export interface TrackResult {
   dy: number;
   /** moved: anchors (indices) whose content didn't come along — it scrolled out of view. */
   lost?: number[];
+  /** Parked marks whose line is back in view. */
+  back?: string[];
+  /** Parked marks the engine can't recognise again (let them go). */
+  forget?: string[];
 }
 
 export type EngineCommand =
