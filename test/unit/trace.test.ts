@@ -178,6 +178,26 @@ describe('where a line of code ends (from pixels)', () => {
     expect(lineEnd(img, { x1: 40, y1: 42, x2: 190, y2: 64 })).toBe(190);
   });
 
+  it("doesn't take a window's edge for the line", () => {
+    // The window ends at x = 400 and the desktop beyond it is grey.
+    const edged = (runs: [number, number, number, number][]) => {
+      const img = bitmap(runs);
+      for (let y = 0; y < img.height; y++) for (let x = 400; x < img.width; x++) img.data.set([128, 128, 128, 255], (y * img.width + x) * 4);
+      return img;
+    };
+    // A box over empty space: the pixels don't show the line, so there's no end to find.
+    expect(lineEnd(edged([]), { x1: 160, y1: 42, x2: 330, y2: 64 })).toBeNull();
+    // Text that runs up to the edge ends where the text does.
+    expect(lineEnd(edged([[40, 70, 44, 62], [80, 392, 44, 62]]), { x1: 40, y1: 42, x2: 380, y2: 64 })).toBe(390);
+  });
+
+  it('keeps a selected word (a filled span inside the line)', () => {
+    const img = bitmap([...words, [200, 260, 44, 62]]);
+    // A selection behind "260…300": a blue fill the full height of the line.
+    for (let y = 40; y < 66; y++) for (let x = 196; x < 264; x++) img.data.set([38, 79, 120, 255], (y * img.width + x) * 4);
+    expect(lineEnd(img, { x1: 40, y1: 42, x2: 250, y2: 64 })).toBe(264);
+  });
+
   it("ignores the next line's ascenders and Pairwise's own cursor", () => {
     // A longer line just below whose tall glyphs reach into the bottom of this line's box.
     const img = bitmap([...words, [40, 400, 62, 80], [196, 214, 40, 66]]);

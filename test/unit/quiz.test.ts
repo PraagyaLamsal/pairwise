@@ -54,4 +54,15 @@ describe('quick checks in the session notes', () => {
     expect(missed).toEqual(['Quick check to try again: “Click where n gets smaller”', 'Quick check to try again: “Click the base case”']);
     expect(checksForNotes([])).toEqual({ lines: [], missed: [], right: 0, total: 0 });
   });
+
+  it('a question asked again once they had it right is a new check, not another try', () => {
+    const q = 'Click the line where the recursion stops';
+    const { lines, right, total } = checksForNotes([
+      { question: q, outcome: 'right' },
+      { question: q, outcome: 'wrong' },
+      { question: q, outcome: 'right' },
+    ]);
+    expect(lines).toEqual([`✓ ${q}`, `✓ ${q} (second try)`]);
+    expect([right, total]).toEqual([2, 2]);
+  });
 });

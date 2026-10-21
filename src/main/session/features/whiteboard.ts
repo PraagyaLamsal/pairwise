@@ -60,6 +60,12 @@ export class WhiteboardFeature {
     if (this.s.isActive) this.s.note('[The whiteboard is open on the student\'s screen. You see it in the screen frames; draw on it with draw_diagram or whiteboard.]');
   }
 
+  /** Open the board, or bring it in front again if something covers it, before drawing on it. */
+  private async bringUp(): Promise<void> {
+    if (this.isOpen) this.window.raise();
+    else await this.open();
+  }
+
   close(): void {
     this.window.hide();
     this.s.update({ whiteboard: false });
@@ -182,7 +188,7 @@ export class WhiteboardFeature {
         .slice(0, 24);
       if (!nodes.length) return { response: { ok: false, error: 'No nodes to draw.' } };
       const edges: DiagramEdge[] = (Array.isArray(args.edges) ? args.edges : []).map((e: Record<string, unknown>) => ({ from: str(e.from), to: str(e.to), label: str(e.label) || undefined })).filter((e: DiagramEdge) => e.from && e.to).slice(0, 40);
-      if (!this.isOpen) await this.open();
+      await this.bringUp();
       if (args.clear !== false && this.ink.all().some((i) => i.author === 'tutor')) this.clear();
       await new Promise((r) => setTimeout(r, 120)); // let the window settle before mapping the pen
       const title = str(args.title);
@@ -207,7 +213,7 @@ export class WhiteboardFeature {
         this.clear();
         return { response: { ok: true } };
       }
-      if (!this.isOpen) await this.open();
+      await this.bringUp();
       const color = this.s.settings.tutorColor;
       const group = this.group();
       const items: InkItem[] = [];

@@ -21,7 +21,7 @@ export class WhiteboardWindow {
   async open(near?: { x: number; y: number }, init?: EventMap['whiteboard:init'], workArea?: Rectangle): Promise<BrowserWindow> {
     const existing = this.window;
     if (existing) {
-      if (!existing.isVisible()) existing.showInactive();
+      this.raise();
       await this.ready;
       if (init) registry.sendTo(existing, 'whiteboard:init', init);
       return existing;
@@ -55,9 +55,18 @@ export class WhiteboardWindow {
     void loadPage(win, 'whiteboard', {}).catch(() => undefined);
     await this.ready;
     win.setBounds(bounds);
-    win.showInactive();
+    this.raise();
     if (init) registry.sendTo(win, 'whiteboard:init', init);
     return win;
+  }
+
+  /** Show it in front of whatever the student has open, without taking focus, so a new drawing is seen. */
+  raise(): void {
+    const w = this.window;
+    if (!w) return;
+    // On macOS this orders it to the front even while Pairwise isn't the active app.
+    w.showInactive();
+    w.moveTop();
   }
 
   hide(): void {

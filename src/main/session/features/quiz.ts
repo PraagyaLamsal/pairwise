@@ -21,14 +21,16 @@ export interface QuizResult {
 }
 
 /**
- * The session's quick checks as note lines (a question asked again after a hint counts once,
+ * The session's quick checks as note lines (a question asked again after a miss counts once,
  * with how many tries it took) and the ones still missed, to review next time.
  */
 export function checksForNotes(results: QuizResult[]): { lines: string[]; missed: string[]; right: number; total: number } {
   const groups: { question: string; outcomes: QuizResult['outcome'][] }[] = [];
   for (const r of results) {
     const last = groups[groups.length - 1];
-    if (last && last.question.toLowerCase() === r.question.toLowerCase()) last.outcomes.push(r.outcome);
+    // Asked again once they had it right, it's a new check, not another try.
+    const retry = last && last.question.toLowerCase() === r.question.toLowerCase() && last.outcomes[last.outcomes.length - 1] !== 'right';
+    if (retry) last.outcomes.push(r.outcome);
     else groups.push({ question: r.question, outcomes: [r.outcome] });
   }
   const tries = (n: number) => (n === 2 ? 'second try' : `${n} tries`);
@@ -82,10 +84,14 @@ export class QuizFeature {
   private pending: { resolve: (r: AnswerResult) => void; timer: NodeJS.Timeout } | null = null;
   /** This session's quick checks (the notes list them). */
   private results: QuizResult[] = [];
+  /** When the last answer came in (the OS reports that click too, just before or after). */
+  private answeredAt = 0;
 
   constructor(private readonly s: TutorSession) {
     ipcMain.on('overlay:answer', (_e, m: { displayId: string; point: Point }) => {
-      if (m && m.point && Number.isFinite(m.point.x) && Number.isFinite(m.point.y)) this.finish({ clicked: true, how: 'clicked', point: m.point, displayId: m.displayId });
+      if (!m || !m.point || !Number.isFinite(m.point.x) || !Number.isFinite(m.point.y)) return;
+      this.answeredAt = Date.now();
+      this.finish({ clicked: true, how: 'clicked', point: m.point, displayId: m.displayId });
     });
     ipcMain.on('overlay:answerCancel', () => this.finish({ clicked: false, how: 'skipped' }));
     s.deps.hotkeys.on('escape', () => this.pending && this.finish({ clicked: false, how: 'skipped' }));
@@ -96,6 +102,11 @@ export class QuizFeature {
   /** A question is waiting for the student's click. */
   get asking(): boolean {
     return this.pending !== null;
+  }
+
+  /** The student's clicks are answers right now (a question is waiting, or was just answered), not actions in an app. */
+  get takingClicks(): boolean {
+    return this.pending !== null || Date.now() - this.answeredAt < 600;
   }
 
   /** Drop a question that's waiting (the student started asking something instead). */
@@ -203,7 +214,8 @@ export class QuizFeature {
     this.pending = null;
     clearTimeout(p.timer);
     this.setAnswerMode(false);
-    if (this.s.snapshot.activity === 'waiting') this.s.setActivity('idle');
+    // A step still waiting for them keeps Ada waiting.
+    if (this.s.snapshot.activity === 'waiting' && !this.s.steps.watching) this.s.setActivity('idle');
     p.resolve(r);
   }
 }

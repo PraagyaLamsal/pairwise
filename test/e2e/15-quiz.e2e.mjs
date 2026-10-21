@@ -119,6 +119,33 @@ try {
   pointer.click();
   await waitFor(async () => (await runs()) === 1, { label: 'a normal click reaches the app again', timeout: 3000 });
 
+  // --- 3b. a step waiting for a click on Run isn't ticked off by an answer on Run ------------
+  // (The OS reports that click to the global hook as well, just before or after the answer.)
+  const osDown = (p) => S((_e, q) => globalThis.__pairwise.platform.hooks.emit('mousedown', { x: q.x, y: q.y, time: Date.now(), button: 1 }), p);
+  await S(() => {
+    const s = globalThis.__pairwise.session;
+    globalThis.__stepDone = false;
+    globalThis.__step = s.tools.dispatch({ id: 'g1', name: 'guide_step', args: { step: 1, instruction: 'Click Run', target: 'the "Run" button', expect: 'click', label: 'click Run' } });
+    globalThis.__step.then(() => (globalThis.__stepDone = true));
+  });
+  await waitFor(() => S(() => globalThis.__pairwise.session.ink.all().some((i) => i.group === 'guide' && i.kind === 'ring')), { label: 'a step waits on Run', timeout: 10_000 });
+  const q3b = ask({ question: 'Click what you would press to try it', answer: 'the "Run" button' });
+  await waitFor(async () => (await answering()).every(Boolean), { label: 'asking during the step', timeout: 10_000 });
+  await osDown(cr);
+  pointer.move(cr.x, cr.y);
+  await sleep(120);
+  pointer.click();
+  const r3b = (await q3b.done).response;
+  assert.equal(r3b.on_target, true, JSON.stringify(r3b));
+  await osDown(cr);
+  await sleep(400);
+  assert.equal(await S(() => globalThis.__stepDone), false, 'the answer did not do the step');
+  await sleep(400);
+  await osDown(cr);
+  const rs = (await S(async () => (await globalThis.__step).response));
+  assert.equal(rs.done, true, `a real click on Run afterwards does (${JSON.stringify(rs)})`);
+  assert.equal(await runs(), 1, 'and the answer never reached the app');
+
   // --- 4. Esc skips --------------------------------------------------------------------------
   const q4 = ask({ question: 'Click where n gets smaller' });
   await waitFor(async () => (await answering()).every(Boolean), { label: 'asking a fourth time', timeout: 10_000 });
@@ -159,10 +186,10 @@ try {
   assert.ok(/## To review[\s\S]*Quick check to try again: “Click where n gets smaller”/.test(notes), 'and the skipped one is to review next time');
   // The course page shows how it went, as soon as the notes are written.
   const resume = await S((_e, id) => globalThis.__pairwise.courses.getResume(id), courseId);
-  assert.deepEqual(resume.checks, { right: 2, total: 3 }, JSON.stringify(resume.checks));
+  assert.deepEqual(resume.checks, { right: 3, total: 4 }, JSON.stringify(resume.checks));
   await waitFor(() => hub.evaluate(() => document.querySelector('.checks-chip')?.textContent ?? ''), { label: 'the score on the course page', timeout: 8000 });
   const chipText = await hub.evaluate(() => document.querySelector('.checks-chip').textContent);
-  assert.equal(chipText.trim(), '✓ 2 of 3 quick checks');
+  assert.equal(chipText.trim(), '✓ 3 of 4 quick checks');
   await hub.locator('.start-zone').screenshot({ path: join(artifacts, 'p15-course-checks.png') });
 
   console.log(`show me: right answer on target, wrong one ${r2.off_by_px} px off, the app underneath untouched, Esc skips, checks in the notes`);

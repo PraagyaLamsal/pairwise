@@ -143,6 +143,8 @@ export class StepsFeature {
 
       if (expect === 'click' && hooks.running && hit) {
         const onDown = (e: MouseEvt) => {
+          // An answer to a "show me" question never reached the app, so it isn't the step.
+          if (this.s.quiz.takingClicks) return;
           if (rectContains(hit, { x: e.x, y: e.y })) this.finishWatch({ done: true, how: 'clicked the target' });
         };
         hooks.on('mousedown', onDown);
@@ -153,7 +155,7 @@ export class StepsFeature {
         let since = 0;
         const timer = setInterval(() => {
           const p = this.s.deps.platform.displays.cursor();
-          if (rectContains(hit, p)) {
+          if (rectContains(hit, p) && !this.s.quiz.takingClicks) {
             if (!since) since = Date.now();
             if (Date.now() - since > (expect === 'hover' ? 350 : 900)) this.finishWatch({ done: true, how: expect === 'hover' ? 'hovered the target' : 'moved onto the target' });
           } else since = 0;

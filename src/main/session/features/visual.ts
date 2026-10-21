@@ -126,8 +126,14 @@ export class VisualFeature {
     return this.s.turn?.id ?? this.s.lastTurnId ?? 'session';
   }
 
-  private style() {
-    return { color: this.s.settings.tutorColor, author: 'tutor' as const, surface: 'screen' as const, group: this.group(), font: noteFont(this.s.settings.noteStyle) };
+  private style(): MarkStyle {
+    return { color: this.s.settings.tutorColor, author: 'tutor', surface: 'screen', group: this.group(), font: noteFont(this.s.settings.noteStyle), avoid: this.ownUi() };
+  }
+
+  /** Where Pairwise's own UI is on screen: the overlays' cards and the session pill. */
+  private ownUi(): Rect[] {
+    const hud = this.s.deps.hud.visible ? this.s.deps.hud.bounds() : null;
+    return [...this.s.overlays.uiRects(), ...(hud ? [inflateRect(hud, 8)] : [])];
   }
 
   /**

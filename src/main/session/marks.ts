@@ -27,6 +27,8 @@ export interface MarkStyle {
   group?: string;
   /** Notes typed in the system font (default) or handwritten. */
   font?: InkItem['font'];
+  /** Pairwise's own UI (the session pill, cards): arrow tails keep clear of it. */
+  avoid?: Rect[];
 }
 
 /** The ink font for the "Ada writes notes" setting. */
@@ -129,7 +131,7 @@ export function valuePosition(line: Rect, text: string, display: Rect, endX?: nu
 /** Turn located mark specs into ink items (geometry + timing fields; revealAt is set later). */
 export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): InkItem[] {
   const out: InkItem[] = [];
-  const taken: Rect[] = specs.flatMap((s) => (s.rect ? [s.rect] : []));
+  const taken: Rect[] = [...specs.flatMap((s) => (s.rect ? [s.rect] : [])), ...(style.avoid ?? [])];
   for (const s of specs) {
     const id = inkId(style.author === 'tutor' ? 't' : 's');
     const base: InkItem = {

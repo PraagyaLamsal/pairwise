@@ -420,3 +420,23 @@ When they land, a macOS notification says so ("COMP 1405 · Why does factorial n
 statement · ✓ 2 of 3 quick checks"); clicking it opens the notes. Not shown when the course page
 is already in front (it refreshes itself), and it can be turned off in Settings → Tutor →
 Session notes → "Tell me when they're saved".
+
+### D-045 · Fixes from a tour of every feature in a row
+Running the demo tutor's whole script with a screenshot after each turn found glitches that
+only show when features meet:
+- **Value chips past a window's edge.** `lineEnd` took the edge of the student's window (a
+  white editor next to a grey desktop) for the line's text when the box had no ink in it, and
+  put the chip 300 px to the right, off the window. A box with nothing in it (or right after it)
+  now gives no end (the chip goes at the box's end), and a scan that runs into a solid fill to
+  the end of its reach stops where the fill starts (a window or pane edge). A selected word —
+  a fill that ends again — still counts as part of the line.
+- **Arrow tails on the session pill.** A tail is placed in clear space away from the other
+  marks; it now keeps clear of Pairwise's own UI too (the pill and the overlays' cards).
+- **An answer click doing a step.** A "Show me" answer never reaches the app, but the global
+  mouse hook still reports it, so a step waiting for a click on the same spot was ticked off.
+  Clicks while a question is waiting (and for 0.6 s after the answer) are not steps. A step
+  still waiting also keeps Ada "waiting" after the question is answered.
+- **A question asked again after a right answer** counted as another try in the notes
+  ("3 tries"); it's now a new check.
+- **The whiteboard behind other windows.** Drawing on a board that's open but covered now
+  brings it to the front again (without taking focus).

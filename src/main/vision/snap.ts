@@ -197,27 +197,44 @@ export function lineEnd(img: Bitmap, box: PxBox, opts: { threshold?: number; rea
   const threshold = opts.threshold ?? 60;
   // Pairwise's own cursor or cards, where the capture includes them (Linux): not the line.
   const ignore = (opts.ignore ?? []).filter((g) => g.y2 > r1 && g.y1 < r2);
-  const inkAt = (x: number) => {
+  /** 0: background only, 1: some ink, 2: every row differs (an edge or a fill, not glyphs). */
+  const inkAt = (x: number): 0 | 1 | 2 => {
     const skip = ignore.filter((g) => x >= g.x1 && x < g.x2);
+    let hits = 0;
+    let rowsSeen = 0;
     for (let y = r1; y < r2; y++) {
       if (skip.length && skip.some((g) => y >= g.y1 && y < g.y2)) continue;
+      rowsSeen++;
       const i = (y * W + x) * 4;
-      if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > threshold) return true;
+      if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > threshold) hits++;
     }
-    return false;
+    return hits === 0 ? 0 : hits === rowsSeen ? 2 : 1;
   };
   const gapMax = Math.max(8, Math.round(th * 1.6));
   let end = -1;
   let gap = 0;
-  for (let x = x1; x < reach; x++) {
-    if (inkAt(x)) {
+  // Where the current run of solid columns started, and where the line had ended before it.
+  let solid = 0;
+  let endBeforeSolid = -1;
+  let x = x1;
+  for (; x < reach; x++) {
+    const k = inkAt(x);
+    if (k === 2) {
+      if (!solid) endBeforeSolid = end;
+      solid++;
+    } else solid = 0;
+    if (k) {
       end = x + 1;
       gap = 0;
       continue;
     }
     gap++;
+    // Nothing in the box or just after it: the pixels don't show this line.
+    if (end < 0 && x >= x2 + gapMax) break;
     // A wide gap after the box: the line is over (inside it, it's alignment, unless very wide).
     if (end >= 0 && gap >= gapMax && (x - gap + 1 >= x2 || gap >= gapMax * 3)) break;
   }
+  // Still solid where the scan gave up: the window or pane ends there, and the line before it.
+  if (x >= reach && solid >= 4) end = endBeforeSolid;
   return end >= 0 ? end : null;
 }
