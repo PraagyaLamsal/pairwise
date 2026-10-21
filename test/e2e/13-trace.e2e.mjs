@@ -146,6 +146,22 @@ try {
     assert.ok(Math.abs(box.width - w) <= 12, `"${c.text}" is as wide as its text (${Math.round(box.width)} vs ${Math.round(w)})`);
   }
 
+  // "Say that again": the trace is redrawn in time with the replayed words, and the repeated
+  // line's value updates in place again (the replay doesn't pile both chips up).
+  await S(() => {
+    globalThis.__replayed = [];
+    globalThis.__pairwise.session.ink.on('op', (op) => {
+      if (op.op === 'add') for (const i of op.items) if (i.chip && String(i.group).endsWith('-replay')) globalThis.__replayed.push({ ...i });
+    });
+    globalThis.__pairwise.session.replay();
+  });
+  await waitFor(() => S(() => globalThis.__replayed.length), { label: 'the trace replayed', timeout: 10_000 });
+  const replayed = await S(() => globalThis.__replayed);
+  assert.equal(replayed.length, SCRIPT.length, `every value comes back (${replayed.map((c) => c.text)})`);
+  const again = replayed.filter((c) => c.text === 'n = 2' || c.text === 'n = 1').sort((a, b) => a.revealAt - b.revealAt);
+  assert.equal(again.length, 2);
+  assert.ok(again[0].fadeAt != null && again[0].fadeAt <= again[1].revealAt && again[0].fadeMs <= 200, `on replay "n = 2" makes way for "n = 1" again (${JSON.stringify(again.map((c) => [c.text, c.revealAt, c.fadeAt]))})`);
+
   console.log(`trace (${tag}): ${r.chips.length} values on lines ${want.join(',')}; gaps ${r.chips.map((c, i) => Math.round(c.at.x - (lineOf(want[i]).x + lineOf(want[i]).width))).join(',')} px; "n = 2" → "n = 1" in place`);
   console.log(`trace e2e (${tag}): all checks passed`);
 } finally {

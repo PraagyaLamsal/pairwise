@@ -248,6 +248,8 @@ export class VisualFeature {
       it.revealAt = times.length ? times[times.length - 1].startAt : want;
       copies.push(it);
     }
+    // A traced line's values update in place again (the copies were taken before that).
+    chainChips(copies);
     this.s.addInk(copies);
     const end = Math.max(...copies.map((c) => c.revealAt + c.drawMs));
     if (this.s.settings.inkFade === 'after-speech') this.s.ink.fade({ group: `${turnId}-replay` }, end + this.s.settings.inkFadeDelaySec * 1000 + 1500);
@@ -631,6 +633,23 @@ const GESTURES = new Set<string>(['hover', 'follow_line', 'sweep']);
  * Value chips that `fresh` chips replace (same line, drawn later): copies set to fade out
  * quickly just before the new value starts to be typed.
  */
+/**
+ * Within one batch drawn together (a replayed turn), each value chip makes way for the next one
+ * on its line, as it did the first time: earlier chips get their quick fade set in place.
+ */
+export function chainChips(items: InkItem[]): void {
+  const chips = items.filter((i) => i.chip && i.at).sort((a, b) => a.revealAt - b.revealAt);
+  chips.forEach((old, k) => {
+    const by = chips.slice(k + 1).find((n) => Math.abs(n.at!.y - old.at!.y) <= 6 && Math.abs(n.at!.x - old.at!.x) < 240 && n.revealAt > old.revealAt);
+    if (!by) return;
+    const at = by.revealAt - 60;
+    if (old.fadeAt == null || old.fadeAt > at) {
+      old.fadeAt = at;
+      old.fadeMs = 180;
+    }
+  });
+}
+
 export function replacedChips(live: InkItem[], fresh: InkItem[], now: number): InkItem[] {
   const chips = fresh.filter((i) => i.chip && i.at);
   if (!chips.length) return [];

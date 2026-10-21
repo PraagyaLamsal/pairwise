@@ -8,7 +8,7 @@ import { lineEnd, type Bitmap } from '../../src/main/vision/snap';
 
 // visual.ts pulls in Electron through its feature imports; the pure helpers are what we test.
 vi.mock('electron', () => ({ ipcMain: { on() {} }, app: { isPackaged: false }, nativeImage: {} }));
-const { beatSequence, demoTrace, replacedChips } = await import('../../src/main/session/features/visual');
+const { beatSequence, chainChips, demoTrace, replacedChips } = await import('../../src/main/session/features/visual');
 const { ExplanationPlanner } = await import('../../src/main/vision/planner');
 const { InkRenderer } = await import('../../src/renderer/ui/ink-render');
 
@@ -135,6 +135,18 @@ describe('value chips (trace_code)', () => {
     const ctx = chipCtx();
     new InkRenderer().render(ctx.ctx, [gone[0]], 4940 + 90, 1);
     expect(ctx.texts.length).toBe(1);
+  });
+});
+
+describe('"say that again" with a trace', () => {
+  it('replayed chips update in place again, instead of piling up on the line', () => {
+    const a = { ...chipFor('n = 2', 262), revealAt: 1000, fadeAt: null };
+    const b = { ...chipFor('2 == 0 → False', 240, { ...line, y: 240 }), revealAt: 2000, fadeAt: null };
+    const c = { ...chipFor('n = 1', 262), revealAt: 4000, fadeAt: null };
+    chainChips([c, b, a]);
+    expect(a).toMatchObject({ fadeAt: 3940, fadeMs: 180 });
+    expect(b.fadeAt).toBeNull();
+    expect(c.fadeAt).toBeNull();
   });
 });
 
