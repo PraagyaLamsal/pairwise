@@ -113,3 +113,15 @@ of travel, scales up to 1.3× mid-flight, lands, streams a short label character
 | Veiled windows outlined in dashed orange on your own screen | Tuple App Veil | Same convention; pixels are blacked out before encoding |
 | Hold ⌃⌥ to talk and draw | HeyClicky | Default "ask" chord |
 | Emoji / full-screen reactions | Tuple | Celebration burst when you get something right |
+
+## Round 2 (2026-10-20): Tuple's paint, text and highlight look
+
+Details and evidence are in HANDOFF.md under "Research so far". In short:
+* Paint is a flat, constant-width stroke in one solid colour, with round caps and joins, set per
+  stroke in the CoreGraphics replay renderer.
+* *Inference:* strokes are smoothed with midpoint quadratic curves (`Path.addQuadCurve` with 0.5
+  factors).
+* There's no glow and no pressure. Drawings fade together after drawing stops.
+* Text annotations are typed system-font text in the participant colour, with no bubble.
+* The highlight click is a dot that becomes an expanding thin ring. *Inference:* its line width
+  goes from 6 to 3 pt as it animates.

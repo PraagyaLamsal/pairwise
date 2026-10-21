@@ -123,6 +123,10 @@ onboarding, usage meter + cap, settings for voice/speed/depth, celebrations) are
 | Quitting mid-session | ✅ | the session is ended properly first (notes + resume state) |
 | Polish | ✅ | hub, HUD, overlays, whiteboard and cards reviewed from screenshots at 1× and 2×; HUD asking/driving states, citation card, consent cards placed away from what they ask about |
 
+## Round 2: in progress
+This round covers the owner's feedback from first use on a Mac: cursor, Tuple brush, declutter, human pen, cursor gestures and a Dock app.
+The plan, research and status are in [HANDOFF.md](HANDOFF.md).
+
 ## Final verification
 The full run on 2026-10-20 started from a clean build, with dist/ and debug output removed.
 
