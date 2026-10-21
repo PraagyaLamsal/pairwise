@@ -13,8 +13,9 @@ const TICK_MS = 250;
 /** …and half as often once nothing has moved for a while. */
 const QUIET_AFTER_MS = 2000;
 /**
- * After a move, the way from the old place to the new stays masked a moment: the marks glide
- * there, and a capture can catch them anywhere along it (or not yet redrawn).
+ * After a move, where the marks were stays masked a moment (the overlays may not have redrawn
+ * yet), and for a chip, its whole way to the new place: it glides there, and a capture can
+ * catch it anywhere along it.
  */
 const RECENT_MS = 700;
 /** At most this many groups are followed (the newest). */
@@ -173,7 +174,12 @@ export class StickyInk {
       if (this.overlaysCaptured) {
         for (const it of this.s.ink.all()) {
           if ((it.group ?? it.id) !== t.key) continue;
-          for (const rect of inkCover(it)) this.recent.push({ rect: inflateRect(unionRects([rect, { ...rect, x: rect.x + dx, y: rect.y + dy }])!, 2), until: now + RECENT_MS });
+          // A chip sits beside its line: all of its way can be masked. A circle's way would
+          // cover the very line it's around, so only where it was is.
+          for (const rect of inkCover(it)) {
+            const way = it.kind === 'text' ? unionRects([rect, { ...rect, x: rect.x + dx, y: rect.y + dy }])! : rect;
+            this.recent.push({ rect: inflateRect(way, 2), until: now + RECENT_MS });
+          }
         }
       }
       const moved = this.s.ink.shift(this.filter(t.key), dx, dy, prefersReducedMotion() ? 0 : 140);

@@ -294,6 +294,40 @@ describe('sticky ink: marks whose line scrolls out of view', () => {
     expect(r3.back).toEqual(['A']);
   });
 
+  it('a group whose lines all scrolled out of view comes back when they do', () => {
+    const t = new InkTracker();
+    const m = none(codeScreen(7));
+    let marks = lines([42, 54, 66]);
+    const ids = ['A', 'B', 'C'];
+    t.step('g', header(codeScreen(7)), m, marks, ids);
+    // Scrolled up a line at a time: A and B go under the header and are parked…
+    const parked: { id: string; box: PxBox }[] = [];
+    let at = 0;
+    for (const by of [-12, -12]) {
+      at += by;
+      const visible = ids.map((id, k) => ({ id, box: marks[k] })).filter((x) => !parked.some((p) => p.id === x.id));
+      const r = t.step('g', header(codeScreen(7, at)), m, visible.map((x) => x.box), visible.map((x) => x.id), parked);
+      expect(r.state, `scrolled to ${at}`).toBe('moved');
+      marks = marks.map((b) => ({ ...b, y: b.y + r.dy }));
+      for (const k of r.lost ?? []) parked.push({ id: visible[k].id, box: visible[k].box });
+      for (const p of parked) p.box = marks[ids.indexOf(p.id)];
+    }
+    expect(parked.map((p) => p.id)).toEqual(['A', 'B']);
+    // …and when C goes too, nothing in view says where they went: after a moment, it's gone.
+    const far = header(codeScreen(7, -120));
+    let r = t.step('g', far, m, [marks[2]], ['C'], parked);
+    for (let i = 1; i < GONE_AFTER && r.state !== 'gone'; i++) r = t.step('g', far, m, [marks[2]], ['C'], parked);
+    expect(r.state).toBe('gone');
+    // Back at the top: C is found, as far from where it was as the scroll back…
+    r = t.step('g', header(codeScreen(7)), m, [marks[2]], ['C'], [], true);
+    expect(r.state).toBe('back');
+    expect(Math.abs(r.dy - 24)).toBeLessThanOrEqual(0.5);
+    // …and with the group moved there, A's and B's lines are where it puts them.
+    marks = marks.map((b) => ({ ...b, y: b.y + r.dy }));
+    const after = t.step('g', header(codeScreen(7)), m, [marks[2]], ['C'], parked.map((p) => ({ id: p.id, box: marks[ids.indexOf(p.id)] })));
+    expect(after.back?.sort()).toEqual(['A', 'B']);
+  });
+
   it("are let go when there's nothing to recognise their line by", () => {
     const t = new InkTracker();
     const m = none(codeScreen(7));

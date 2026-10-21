@@ -358,9 +358,9 @@ menus (src/main/app-menu.ts), unreadable-key detection. Tests: `build-app.test.t
   `src/main/session/prompts.ts`.
 * Battery on a real Mac (Activity Monitor during an idle session), and Reduce motion with the
   system setting on.
-* Sticky ink could find parked marks again when everything in their group had scrolled out of
-  view (today they come back only while part of the group stays in view, or after the group
-  counts as gone and is found again), and follow a window dragged to another display.
+* Sticky ink could follow a window dragged to another display (each display is its own
+  stream). (A group whose lines all scroll out of view already comes back: the last one to go
+  makes it count as gone, and its last good view is found again; unit-tested.)
 
 ## Environment notes for the next session
 

@@ -549,9 +549,12 @@ a group that went away (another app) is looked for the same way, so it comes bac
 window was moved meanwhile. Parked lines and the snap against the first look keep a sideways
 offset too.
 Where captures include Pairwise's own windows, the marks themselves are masked out, and two
-details there each hid the marks in testing: a capture can catch a mark mid-glide, so after a
-move the whole way from its old place to its new one stays masked for 0.7 s (not just the two
-ends); and a chip's soft edge spills past its box, so every mask is 2 DIP wider.
+details there each hid the marks in testing: a capture can catch a chip mid-glide, so after a
+move a chip's whole way from its old place to its new one stays masked for 0.7 s (not just the
+two ends); and a chip's soft edge spills past its box, so every mask is 2 DIP wider. Only
+chips: a circle's way would cover the very line it's around (they sit beside their lines,
+circles around them), and when circles were masked that way, a circled line scrolling under the
+header could no longer be seen going, and its circle wasn't hidden.
 Cost: the 2-D search runs only when the vertical one has failed with nothing in place: about
 9 ms on top of the ~10 ms vertical search for a 720×450 capture. While a group is away, its
 looks count as quiet, so after 2 s they're taken half as often. Windows dragged to another
