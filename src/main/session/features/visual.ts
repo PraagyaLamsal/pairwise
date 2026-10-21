@@ -630,10 +630,9 @@ export class VisualFeature {
 
 const GESTURES = new Set<string>(['hover', 'follow_line', 'sweep']);
 
-/**
- * Value chips that `fresh` chips replace (same line, drawn later): copies set to fade out
- * quickly just before the new value starts to be typed.
- */
+/** Two value chips at the same line's end (the newer one replaces the older). */
+const sameLine = (a: InkItem, b: InkItem): boolean => Math.abs(a.at!.y - b.at!.y) <= 6 && Math.abs(a.at!.x - b.at!.x) < 240;
+
 /**
  * Within one batch drawn together (a replayed turn), each value chip makes way for the next one
  * on its line, as it did the first time: earlier chips get their quick fade set in place.
@@ -641,7 +640,7 @@ const GESTURES = new Set<string>(['hover', 'follow_line', 'sweep']);
 export function chainChips(items: InkItem[]): void {
   const chips = items.filter((i) => i.chip && i.at).sort((a, b) => a.revealAt - b.revealAt);
   chips.forEach((old, k) => {
-    const by = chips.slice(k + 1).find((n) => Math.abs(n.at!.y - old.at!.y) <= 6 && Math.abs(n.at!.x - old.at!.x) < 240 && n.revealAt > old.revealAt);
+    const by = chips.slice(k + 1).find((n) => sameLine(n, old) && n.revealAt > old.revealAt);
     if (!by) return;
     const at = by.revealAt - 60;
     if (old.fadeAt == null || old.fadeAt > at) {
@@ -651,13 +650,17 @@ export function chainChips(items: InkItem[]): void {
   });
 }
 
+/**
+ * Value chips that `fresh` chips replace (same line, drawn later): copies set to fade out
+ * quickly just before the new value starts to be typed.
+ */
 export function replacedChips(live: InkItem[], fresh: InkItem[], now: number): InkItem[] {
   const chips = fresh.filter((i) => i.chip && i.at);
   if (!chips.length) return [];
   const gone: InkItem[] = [];
   for (const old of live) {
     if (!old.chip || !old.at || old.author !== 'tutor' || chips.includes(old)) continue;
-    const by = chips.find((n) => Math.abs(n.at!.y - old.at!.y) <= 6 && Math.abs(n.at!.x - old.at!.x) < 240 && n.revealAt > old.revealAt);
+    const by = chips.find((n) => sameLine(n, old) && n.revealAt > old.revealAt);
     if (!by) continue;
     const at = Math.max(now, by.revealAt - 60);
     if (old.fadeAt != null && old.fadeAt <= at) continue;

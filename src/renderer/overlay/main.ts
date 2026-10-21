@@ -201,7 +201,8 @@ function frame(): void {
     }
     const list = [...items.values()];
     const live = liveStrokeItem();
-    const animating = renderer.animating(list, now) || celebrations.active || live !== null || cursor.animating;
+    // The canvas only redraws for ink; the cursor is a DOM element with its own schedule.
+    const animating = renderer.animating(list, now) || celebrations.active || live !== null;
     if (dirty || animating || wasAnimating) {
       const b = init.display.bounds;
       ctx.setTransform(1, 0, 0, 1, 0, 0);

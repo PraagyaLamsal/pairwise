@@ -103,10 +103,6 @@ export class CursorView {
     return this.pos;
   }
 
-  get animating(): boolean {
-    return this.segs.length > 0;
-  }
-
   /** When the cursor next needs drawing: now while it moves (or follows main's frames), else when its next move starts. */
   nextChange(now: number): number {
     if (this.segs.length) {
