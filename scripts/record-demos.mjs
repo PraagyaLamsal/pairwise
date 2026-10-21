@@ -249,7 +249,7 @@ const scenes = {
     await waitFor(() => S(() => [...globalThis.__pairwise.session.ink.all()].filter((i) => i.chip).length >= 3), { label: 'trace drawn', timeout: 40_000 });
     await waitFor(() => S(() => !globalThis.__pairwise.session.turn && !globalThis.__pairwise.session.playback.playing), { label: 'spoken', timeout: 40_000 });
     await sleep(1200);
-    // The student scrolls down a few lines, then back up a bit: her marks come along.
+    // The student scrolls down a few lines, then back up: her marks come along.
     const scroll = async (from, to, ms) => {
       const n = Math.max(2, Math.round(ms / 40));
       for (let i = 1; i <= n; i++) {
@@ -260,10 +260,12 @@ const scenes = {
         await sleep(25);
       }
     };
+    // Down (the first line, and its value, go under the header), then all the way back up
+    // (it comes back).
     await scroll(0, 120, 700);
     await sleep(2200);
-    await scroll(120, 45, 500);
-    await sleep(2200);
+    await scroll(120, 0, 600);
+    await sleep(2400);
     await rec.stop('demo-sticky', { width: 640 });
     await app.close();
   },

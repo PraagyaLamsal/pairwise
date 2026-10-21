@@ -11,6 +11,13 @@ const CHANGE_CELLS = 0.004; // fraction of grid cells that must change to count 
 /** Sticky ink compares the screen at half a pixel per DIP. */
 const TRACK_SCALE = 0.5;
 
+/**
+ * Debugging sticky ink: a script that sets `globalThis.__pairwiseTrackDump = []` in this window
+ * gets every look appended (grey image, mask, boxes, verdicts) to replay offline
+ * (scripts/debug/sticky-dump.mjs, scripts/debug/replay-track.mts). Never set by the app.
+ */
+const trackDump = (): unknown[] | undefined => (globalThis as { __pairwiseTrackDump?: unknown[] }).__pairwiseTrackDump;
+
 interface Source {
   spec: CaptureSourceSpec;
   stream: MediaStream | null;
@@ -248,7 +255,11 @@ export class ScreenCapture {
     const sig = this.signature(src, groups);
     const same = sig && this.trackSig && sig.length === this.trackSig.length && sig.every((v, i) => Math.abs(v - this.trackSig![i]) <= 3);
     this.trackSig = sig;
-    if (known && same) return again();
+    if (known && same) {
+      const r = again();
+      trackDump()?.push({ t: Date.now(), again: true, results: r });
+      return r;
+    }
     const w = Math.max(1, Math.round(b.width * TRACK_SCALE));
     const h = Math.max(1, Math.round(b.height * TRACK_SCALE));
     if (!this.trackCanvas || this.trackCanvas.width !== w || this.trackCanvas.height !== h) {
@@ -263,10 +274,12 @@ export class ScreenCapture {
     const gray = grayFromRGBA(ctx.getImageData(0, 0, w, h).data, w, h);
     const px = (r: Rect): PxBox => ({ x: (r.x - b.x) * TRACK_SCALE, y: (r.y - b.y) * TRACK_SCALE, w: r.width * TRACK_SCALE, h: r.height * TRACK_SCALE });
     const mask = maskOf(w, h, [...masks, ...movingAreas(this.history, GRID_W, GRID_H, b)].map(px));
-    return groups.map((g) => {
+    const out = groups.map((g) => {
       const r = this.tracker.step(g.key, gray, mask, g.anchors.map(px), g.ids, (g.parked ?? []).map((p) => ({ id: p.id, box: px(p.anchor) })), Boolean(g.away));
       return { key: g.key, state: r.state, dy: r.dy / TRACK_SCALE, ...(r.lost?.length ? { lost: r.lost } : {}), ...(r.back ? { back: r.back } : {}), ...(r.forget ? { forget: r.forget } : {}) };
     });
+    trackDump()?.push({ t: Date.now(), w, h, gray: gray.data, mask, groups: groups.map((g) => ({ key: g.key, boxes: g.anchors.map(px), ids: g.ids, parked: (g.parked ?? []).map((p) => ({ id: p.id, box: px(p.anchor) })), away: Boolean(g.away) })), results: out });
+    return out;
   }
 
   /** Note that main just sent a frame (e.g. a hi-res one), so live sampling respects the 1 fps cap. */

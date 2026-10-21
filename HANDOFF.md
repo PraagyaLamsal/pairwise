@@ -28,6 +28,39 @@ keep it current: tick items, add findings, record decisions in DECISIONS.md.
   `src/main/session/features/sticky.ts`), so a scroll moves them (and the turn's marks still to
   come) and switching apps clears them. e2e `16-sticky` at 1× and 2× (21 runs in all).
 
+## In progress when this was written: sticky ink drifts after a big scroll
+
+**Pick this up first.** Re-recording the README's sticky demo with a longer scroll (0 → 120 px →
+0, `scripts/record-demos.mjs sticky`) showed the chips moving only part of the way down, then
+ending a line or two off after scrolling back. The committed `demo-sticky.gif` is the older,
+correct recording (it scrolls 0 → 120 → 45); the scene in `record-demos.mjs` already has the
+new scroll, so re-record once this is fixed.
+
+* **Repro + dump:** `scripts/debug/sticky-dump.mjs` (header comment has the Xvfb lines) runs
+  that scene with the engine's tracker inputs dumped. `node scripts/debug/replay-track.mts <dir>`
+  replays every look through the real `InkTracker` (its verdicts match the engine's, in image
+  pixels: ×2 for DIP); `… <dir> 1 2` runs one `judge()`. In one run the log said moved −36,
+  −57, then **+123** DIP (should be about −27), and the same mirrored on the way back.
+* **Cause (from the replay of look 2 against look 1):** two anchors are left (the first line,
+  `def fib(k):`, is parked under the header): `for _ in range(k):` (now half under the header,
+  its best plain score anywhere 0.73) and `return a`. The true shift is −13.5 px, a half pixel,
+  so the coarse whole-pixel search scores `return a` there at only 0.42–0.50. At +61.5 px it
+  scores 0.33, because the anchor box covers just `    return a` and line 10 starts
+  `    return n * …` (11 of 12 characters the same). The fine quarter-pixel pass only refines
+  the coarse winner, so −13.5 is never tried. The plain search then "agrees" through the weak
+  rule (match 0.43 ≥ MOVE_AGREE with steady < GONE), so the static-tolerant search, which would
+  explain the header-covered anchor and agree on −13.5, never runs.
+* **Planned fix (in `judge`, `src/renderer/engine/ink-track.ts`):**
+  1. refine the best few coarse minima (e.g. three, at least 3 px apart) at quarter pixels,
+     not just the winner;
+  2. when the plain search only agrees through MOVE_AGREE (match < AGREE), also run the
+     static-tolerant search and keep whichever has more agreement;
+  3. maybe: give each anchor some context to the right of its text, so a line that is a prefix
+     of another can't match it (mask permitting);
+  4. a unit test in `test/unit/ink-track.test.ts` modelled on this (two similar lines, a
+     half-pixel scroll, one anchor half under a static header). Then re-run e2e
+     `16-sticky` at 1× and 2×, `13-trace`, `04`, and re-record the GIF.
+
 ## The owner's requests (verbatim, 2026-10-20)
 
 > 1) i dont like how adas cursor follows me so violently. her cursor should just stya in place when
