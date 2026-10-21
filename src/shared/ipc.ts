@@ -236,12 +236,17 @@ export interface TrackGroup {
   ids: string[];
   /** Marks hidden because their line went out of view, with where their line would be now. */
   parked?: { id: string; anchor: Rect }[];
+  /** All of it went: `anchors` are where it was, to look for it again. */
+  away?: boolean;
 }
 
-/** Where a group's content is now: still there, moved by `dy` (DIP, + = down), or gone. */
+/**
+ * Where a group's content is now: still there, moved by `dy` (DIP, + = down), gone (hide its
+ * marks), or back after being gone (`dy` from where it was).
+ */
 export interface TrackResult {
   key: string;
-  state: 'steady' | 'moved' | 'gone' | 'unsure';
+  state: 'steady' | 'moved' | 'gone' | 'unsure' | 'back';
   dy: number;
   /** moved: anchors (indices) whose content didn't come along — it scrolled out of view. */
   lost?: number[];

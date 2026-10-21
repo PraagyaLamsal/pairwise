@@ -458,9 +458,11 @@ has moved for 2 s):
   the engine remembers how that line looked and checks for it where the group's movement
   says it should be. (A group with nothing left in view can't be followed; its parked marks
   stay hidden.)
-- **Gone** (another app or tab, a closed file) → the marks fade rather than point at the wrong
-  thing, and the rest of the turn's marks are dropped. It has to stay changed for ~1 s, so a
-  flicker doesn't clear anything.
+- **Gone** (another app or tab, a closed file) → the marks hide rather than point at the wrong
+  thing (it has to stay changed for ~1 s, so a flicker hides nothing), and the rest of the
+  turn's marks are dropped. The engine keeps the last good view of what they marked and looks
+  for it in each new screen: switch back, or scroll back to it, and the marks come back where
+  it is now. After 90 s away they're let go.
 - **A tooltip, a caret, typing, the student's pointer on a mark** → nothing happens.
 
 How: each mark knows what it's about (`InkItem.anchor`: a chip's line, an arrow's or note's

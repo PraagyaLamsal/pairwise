@@ -48,7 +48,7 @@ export const WHATS_NEW = {
     { icon: 'pointer', title: 'She traces your code like a debugger', text: 'Her cursor steps through the lines as they run, and the values appear beside each one.' },
     { icon: 'check', title: '“Show me” questions', text: 'Now and then she asks you to click the answer on your screen, and tells you if you got it.' },
     { icon: 'pen', title: 'A quieter screen, like a Tuple call', text: 'Her cursor stays where she leaves it and fades back. She mostly points.' },
-    { icon: 'sparkle', title: 'Her marks stay with what they mark', text: 'Scroll, and they move with the code. Switch to something else, and they clear.' },
+    { icon: 'sparkle', title: 'Her marks stay with what they mark', text: 'Scroll, and they move with the code. Switch away, and they wait until you’re back.' },
     { icon: 'file', title: 'Notes that keep score', text: 'Your quick checks go into the notes, and the ones you missed come back next time.' },
     { icon: 'bolt', title: 'Lighter and steadier', text: 'Half the CPU when idle, Reduce motion respected, and Wi-Fi drops ridden out.' },
   ],

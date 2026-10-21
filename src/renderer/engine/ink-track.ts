@@ -344,11 +344,14 @@ interface GroupState {
   synced: boolean;
   /** Marks whose line went out of view: how that line looked then, and where it was (px). */
   looks: Map<string, { look: Anchor; y: number }>;
+  /** All of it went (another app, a far scroll): `ref` is the last good view, looked for in each new one. */
+  away: boolean;
 }
 
 /** What one sample says about a group. */
 export interface StepResult {
-  state: 'steady' | 'moved' | 'gone' | 'unsure';
+  /** `gone`: all of it went (hide the marks); `back`: it's on screen again, `dy` from where it was. */
+  state: 'steady' | 'moved' | 'gone' | 'unsure' | 'back';
   dy: number;
   /** moved: anchors (indices) whose line went out of view — park those marks. */
   lost?: number[];
@@ -378,7 +381,7 @@ export class InkTracker {
    */
   again(key: string): { state: 'steady' | 'gone' | 'unsure'; dy: number } {
     const g = this.groups.get(key);
-    if (!g) return { state: 'unsure', dy: 0 };
+    if (!g || g.away) return { state: 'unsure', dy: 0 };
     if (g.last === 'unsure') {
       g.stillFor++;
       this.settle(g);
@@ -401,10 +404,12 @@ export class InkTracker {
     g.stillFor = 0;
   }
 
-  private changedAgain(key: string, g: GroupState): { state: 'gone' | 'unsure'; dy: number } {
+  private changedAgain(_key: string, g: GroupState): { state: 'gone' | 'unsure'; dy: number } {
     g.changed++;
     if (g.changed < GONE_AFTER) return { state: 'unsure', dy: 0 };
-    this.groups.delete(key);
+    // Gone: keep the last good view (ref) to recognise it if it comes back.
+    g.away = true;
+    g.changed = 0;
     return { state: 'gone', dy: 0 };
   }
 
@@ -423,12 +428,15 @@ export class InkTracker {
    * they'd be now). The first sample just remembers how it looks. `gone` only after it stays
    * changed.
    */
-  step(key: string, cur: Gray, mask: Uint8Array, boxes: PxBox[], ids: string[] = [], parked: { id: string; box: PxBox }[] = []): StepResult {
+  step(key: string, cur: Gray, mask: Uint8Array, boxes: PxBox[], ids: string[] = [], parked: { id: string; box: PxBox }[] = [], away = false): StepResult {
     const g = this.groups.get(key);
+    // Away, but this engine never saw it (it restarted): nothing to look for.
+    if (away && (!g || !g.away)) return { state: 'unsure', dy: 0 };
     if (!g || g.ref.width !== cur.width || g.ref.height !== cur.height) {
-      this.groups.set(key, { ref: cur, refMask: mask, changed: 0, last: 'steady', prev: cur, prevMask: mask, stillFor: 0, origin: cur, originMask: mask, offset: 0, synced: true, looks: new Map() });
+      this.groups.set(key, { ref: cur, refMask: mask, changed: 0, last: 'steady', prev: cur, prevMask: mask, stillFor: 0, origin: cur, originMask: mask, offset: 0, synced: true, looks: new Map(), away: false });
       return parked.length ? { state: 'steady', dy: 0, forget: parked.map((p) => p.id) } : { state: 'steady', dy: 0 };
     }
+    if (g.away) return this.lookForIt(g, cur, mask, boxes);
     const v = judge(g.ref, g.refMask, cur, mask, boxes);
     // A line that went out of view: remember how it looked (in the reference, before the move).
     if (v.state === 'moved') {
@@ -465,6 +473,26 @@ export class InkTracker {
       }
     }
     return v.state === 'steady' ? { state: 'steady', dy: 0, ...this.parkedBack(g, cur, mask, parked, 0) } : { state: v.state, dy: v.dy };
+  }
+
+  /**
+   * While it's away: is its last good view on screen again — where it was (they switched back)
+   * or anywhere up or down (they scrolled back to it)? Most of it has to be there, at one shift.
+   */
+  private lookForIt(g: GroupState, cur: Gray, mask: Uint8Array, boxes: PxBox[]): StepResult {
+    const v = judge(g.ref, g.refMask, cur, mask, boxes);
+    const there = v.state === 'steady' ? v.steady >= AGREE || v.match >= AGREE : v.state === 'moved' && v.match >= AGREE;
+    if (!there) return { state: 'unsure', dy: 0 };
+    g.away = false;
+    g.last = 'steady';
+    g.ref = cur;
+    g.refMask = mask;
+    g.prev = cur;
+    g.prevMask = mask;
+    g.stillFor = 0;
+    g.offset += v.dy;
+    g.synced = v.dy === 0;
+    return { state: 'back', dy: v.dy };
   }
 
   /**

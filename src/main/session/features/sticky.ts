@@ -16,9 +16,14 @@ const QUIET_AFTER_MS = 2000;
 const RECENT_MS = 700;
 /** At most this many groups are followed (the newest). */
 const MAX_GROUPS = 8;
+/** Marks whose content went away are hidden this long, in case it comes back, then let go. */
+const AWAY_MS = 90_000;
 
-/** A group of marks for the engine: its key and what each of its marks is about. */
-export function trackGroups(items: InkItem[], display: Rect, now = Date.now()): TrackGroup[] {
+/**
+ * Groups of marks for the engine: each one's key and what each of its marks is about. A group
+ * whose content went away (`away`: its key → the marks hidden then) is looked for where it was.
+ */
+export function trackGroups(items: InkItem[], display: Rect, now = Date.now(), away?: ReadonlyMap<string, { ids: string[] }>): TrackGroup[] {
   const byKey = new Map<string, TrackGroup>();
   for (const it of items) {
     // Fading marks (a cleared group among them) aren't followed.
@@ -27,9 +32,16 @@ export function trackGroups(items: InkItem[], display: Rect, now = Date.now()): 
     const a = inkAnchor(it);
     if (!a) continue;
     const g = byKey.get(key) ?? { key, anchors: [], ids: [], parked: [] };
-    // A parked mark's line is out of view: it's looked for, not followed.
-    if (it.park?.on) g.parked!.push({ id: it.id, anchor: a });
-    else if (rectsIntersect(a, display)) {
+    const gone = away?.get(key);
+    if (gone) {
+      if (!gone.ids.includes(it.id)) continue;
+      g.away = true;
+      g.anchors.push(a);
+      g.ids.push(it.id);
+    } else if (it.park?.on) {
+      // A parked mark's line is out of view: it's looked for, not followed.
+      g.parked!.push({ id: it.id, anchor: a });
+    } else if (rectsIntersect(a, display)) {
       g.anchors.push(a);
       g.ids.push(it.id);
     } else continue;
@@ -53,6 +65,8 @@ export class StickyInk {
   /** Since when every group has been steady. */
   private quietSince = 0;
   private recent: { rect: Rect; until: number }[] = [];
+  /** Groups whose content went away (another app, a far scroll): when, and which marks were hidden. */
+  private away = new Map<string, { since: number; ids: string[] }>();
   /** Screen captures include Pairwise's own windows everywhere but macOS: skip those pixels too. */
   private readonly overlaysCaptured = !env.isMac || process.env.PAIRWISE_CAPTURE_OVERLAYS === '1';
 
@@ -76,6 +90,17 @@ export class StickyInk {
     this.timer = null;
     this.recent = [];
     this.quietSince = 0;
+    if (!this.s.isActive) this.away.clear();
+  }
+
+  /** Away too long: let those marks go. */
+  private expireAway(now: number): void {
+    for (const [key, a] of this.away) {
+      if (now - a.since < AWAY_MS) continue;
+      this.away.delete(key);
+      this.s.ink.fade({ ids: a.ids });
+      log.info(`marks ${key} let go: what they marked didn't come back`);
+    }
   }
 
   private async tick(): Promise<void> {
@@ -83,9 +108,11 @@ export class StickyInk {
     if (!this.enabled) return this.sleep();
     const now = Date.now();
     if (this.quietSince && now - this.quietSince > QUIET_AFTER_MS && this.ticks++ % 2) return;
+    this.expireAway(now);
     const display = this.s.deps.platform.displays.byId(this.s.activeDisplayId);
     const items = this.s.ink.live('screen');
-    const groups = display ? trackGroups(items, display.bounds, now) : [];
+    const groups = display ? trackGroups(items, display.bounds, now, this.away) : [];
+    for (const key of [...this.away.keys()]) if (!groups.some((g) => g.key === key)) this.away.delete(key);
     if (!groups.length) return this.sleep();
     this.busy = true;
     try {
@@ -152,9 +179,26 @@ export class StickyInk {
     if (t.back?.length) this.s.ink.park(t.back, false);
     if (t.forget?.length) this.s.ink.fade({ ids: t.forget });
     if (t.state === 'gone') {
-      this.s.ink.fade(this.filter(t.key));
+      // Hidden, not cleared: if what they mark comes back (they switch back, or scroll back to
+      // it) so do they. The rest of the turn's marks would land on nothing, so those go.
+      const ids = g.ids.filter((id) => !this.s.ink.all().find((i) => i.id === id)?.park?.on);
+      this.s.ink.park(ids, true);
+      this.away.set(t.key, { since: Date.now(), ids });
       this.s.visual.dropWaiting(t.key);
-      log.info(`marks ${t.key} cleared: what they marked has gone`);
+      log.info(`marks ${t.key} hidden: what they marked has gone`);
+    } else if (t.state === 'back') {
+      const a = this.away.get(t.key);
+      this.away.delete(t.key);
+      const dy = Math.round(t.dy * 2) / 2;
+      if (Math.abs(dy) >= 1) {
+        this.s.ink.shift(this.filter(t.key), 0, dy, 0);
+        this.s.visual.shiftWaiting(t.key, 0, dy);
+        // Her cursor, if it was resting among them, comes back with them.
+        const c = this.s.cursor.position;
+        if (g.anchors.some((r) => rectContains(inflateRect(r, 40), c))) this.s.cursor.follow(0, dy);
+      }
+      if (a) this.s.ink.park(a.ids, false);
+      log.info(`marks ${t.key} back with what they mark (${dy} px)`);
     }
   }
 }

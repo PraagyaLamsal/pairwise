@@ -258,6 +258,35 @@ describe('sticky ink: marks whose line scrolls out of view', () => {
   });
 });
 
+describe('sticky ink: a group whose content goes away', () => {
+  it('is recognised when it comes back, where it was or scrolled', () => {
+    const t = new InkTracker();
+    const m = none(codeScreen(7));
+    const boxes = lines([42, 66, 90]);
+    t.step('g', codeScreen(7), m, boxes);
+    // Another app: gone after a moment…
+    const other = codeScreen(42);
+    const gone = Array.from({ length: GONE_AFTER }, () => t.step('g', other, m, boxes, [], [], false).state);
+    expect(gone[gone.length - 1]).toBe('gone');
+    // …and while it stays away, nothing comes back.
+    expect(t.step('g', other, m, boxes, [], [], true).state).toBe('unsure');
+    expect(t.again('g').state).toBe('unsure');
+    // Back, but scrolled by 30 px meanwhile: found, with how far it moved.
+    const r = t.step('g', codeScreen(7, 30), m, boxes, [], [], true);
+    expect(r.state).toBe('back');
+    expect(Math.abs(r.dy - 30)).toBeLessThanOrEqual(0.5);
+    // From then on it's followed as before.
+    const moved = boxes.map((b) => ({ ...b, y: b.y + r.dy }));
+    expect(t.step('g', codeScreen(7, 30), m, moved).state).toBe('steady');
+  });
+
+  it('an engine that never saw it has nothing to look for', () => {
+    const t = new InkTracker();
+    const m = none(codeScreen(7));
+    expect(t.step('g', codeScreen(7), m, lines([42]), [], [], true).state).toBe('unsure');
+  });
+});
+
 describe('sticky ink: areas that never stop changing', () => {
   it('a video (cells changing in every sample) is skipped, a scroll (a burst) is not', () => {
     const W = 8;

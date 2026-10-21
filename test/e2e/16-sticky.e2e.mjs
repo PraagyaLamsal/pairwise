@@ -174,16 +174,28 @@ try {
   }
   await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-trace-scrolled-screen.png`));
 
-  // --- 4. another tab in front of the code: the marks clear ------------------------------------
+  // --- 4. another tab in front of the code: the marks hide; back to the code, they come back ---
   // (Switching the window's page, like a browser tab: in this test display a newly opened window
   // is composited under the older ones, so covering the code with one isn't seen.)
   await S((_e, o) => globalThis.__targets.find((w) => w.id === o.id).webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(o.html)}`), { id: win.id, html: OTHER });
-  const showing = () => S(() => globalThis.__pairwise.session.ink.all().filter((i) => i.fadeAt == null || i.fadeAt > Date.now()).length);
-  assert.ok((await showing()) >= 3, 'the trace is on screen');
-  await waitFor(async () => (await showing()) === 0, { label: 'the marks clear when what they marked is gone', timeout: 6000, interval: 150 });
+  const shown = () => S(() => globalThis.__pairwise.session.ink.all().filter((i) => (i.fadeAt == null || i.fadeAt > Date.now()) && !i.park?.on));
+  assert.ok((await shown()).length >= 3, 'the trace is on screen');
+  await waitFor(async () => (await shown()).length === 0, { label: 'the marks hide when what they marked is gone', timeout: 6000, interval: 150 });
   await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-switched-screen.png`));
+  // Back to the code (the page reloads at the top, 150 px from where the marks were): the
+  // chips come back, each beside its line.
+  await S((_e, o) => globalThis.__targets.find((w) => w.id === o.id).webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(o.html)}`), { id: win.id, html: IDE });
+  await waitFor(async () => (await shown()).length >= 3, { label: 'the marks come back with the code', timeout: 8000, interval: 150 });
+  await sleep(500);
+  for (const c of (await shown()).filter((i) => i.chip)) {
+    const st = STEPS.find((x) => x.value === c.text);
+    const line = win.els[st.line];
+    const mid = c.at.y + Math.round(c.fontSize * 1.62) / 2;
+    assert.ok(Math.abs(mid - (line.y + line.height / 2)) <= 4, `"${c.text}" is back beside its line (${mid} vs ${line.y + line.height / 2})`);
+  }
+  await screenShot(app, id, join(artifacts, `p16-${d1.scaleFactor}x-back-screen.png`));
 
-  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); a line under the header → parked, back with it; scrolled mid-trace → later chips on their lines; another page → cleared');
+  console.log('sticky ink: still and pointer-over → unchanged; scrolled 60 px up and 35 back → marks followed (±2 px); a line under the header → parked, back with it; scrolled mid-trace → later chips on their lines; another page → hidden, and back with the code');
   console.log(`sticky ink e2e (${d1.scaleFactor}x): all checks passed`);
 } finally {
   await app.close().catch(() => undefined);
