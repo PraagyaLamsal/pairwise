@@ -21,6 +21,12 @@ type Tool = 'pen' | 'eraser';
 const items = new Map<string, InkItem>();
 const renderer = new InkRenderer();
 let dirty = true;
+/** Wakes the render loop (it sleeps while nothing moves; set up with the canvas). */
+let wakeLoop: () => void = () => undefined;
+function markDirty(): void {
+  dirty = true;
+  wakeLoop();
+}
 let onItemsChanged: () => void = () => undefined;
 
 function applyInk(op: InkOp): void {
@@ -55,7 +61,7 @@ function applyInk(op: InkOp): void {
       }
       break;
   }
-  dirty = true;
+  markDirty();
   onItemsChanged();
 }
 
@@ -88,7 +94,7 @@ function Board() {
       items.clear();
       renderer.clearCache();
       for (const it of m.items) items.set(it.id, it);
-      dirty = true;
+      markDirty();
       setCount(items.size);
     };
     void ipc.invoke('whiteboard:state').then(init).catch(() => undefined);
@@ -102,13 +108,13 @@ function Board() {
         items.clear();
         renderer.clearCache();
         for (const it of m.items) items.set(it.id, it);
-        dirty = true;
+        markDirty();
         setCount(items.size);
       }),
       ipc.on('whiteboard:ink', (op) => applyInk(op)),
       ipc.on('session:snapshot', (s) => setSnap(s)),
     ];
-    void document.fonts.ready.then(() => (dirty = true));
+    void document.fonts.ready.then(() => markDirty());
     return () => offs.forEach((o) => o());
   }, []);
 
@@ -124,7 +130,7 @@ function Board() {
       canvas.height = Math.round(window.innerHeight * dpr);
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
-      dirty = true;
+      markDirty();
     };
     window.addEventListener('resize', resize);
     resize();
@@ -157,11 +163,28 @@ function Board() {
         dirty = false;
       }
       was = anim;
-      raf = requestAnimationFrame(frame);
+      // Sleep until something changes (an op, a stroke) or the next scheduled mark or fade.
+      const next = anim ? now : renderer.nextChange(list, now);
+      if (next <= now + 20) wake();
+      else if (Number.isFinite(next)) sleep = window.setTimeout(wake, Math.max(0, next - Date.now() - 12));
     };
-    raf = requestAnimationFrame(frame);
+    let sleep = 0;
+    const wake = () => {
+      if (sleep) {
+        window.clearTimeout(sleep);
+        sleep = 0;
+      }
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        frame();
+      });
+    };
+    wakeLoop = wake;
+    wake();
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(sleep);
+      wakeLoop = () => undefined;
       window.removeEventListener('resize', resize);
     };
   }, []);
@@ -188,7 +211,7 @@ function Board() {
     if (toolRef.current === 'eraser') return eraseAt(p);
     live.current = [p];
     setDrawing(true);
-    dirty = true;
+    markDirty();
   };
   const onMove = (e: React.PointerEvent) => {
     if (toolRef.current === 'eraser') {
@@ -203,7 +226,7 @@ function Board() {
       const last = live.current[live.current.length - 1];
       if (Math.hypot(p.x - last.x, p.y - last.y) >= 0.8) live.current.push(p);
     }
-    dirty = true;
+    markDirty();
   };
   const onUp = () => {
     const pts = live.current;
@@ -211,7 +234,7 @@ function Board() {
     setDrawing(false);
     // A click without a drag is a dot, like Tuple's paint.
     if (pts && pts.length) ipc.send('whiteboard:stroke', { id: `ws-${Date.now()}`, points: pts, times: [], straight: false, displayId: '', surface: 'whiteboard' });
-    dirty = true;
+    markDirty();
   };
 
   const tutorBusy = snap?.activity === 'speaking' || snap?.activity === 'thinking';

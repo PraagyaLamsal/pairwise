@@ -392,6 +392,8 @@ pointer, which neither capture contains, is drawn in where the scene moved it). 
 frames into small GIFs (60–110 KB each). Rejected: recording the X screen directly (the
 compositor's transparent overlays aren't in root-window captures) and screenshots in a loop
 (4–5 fps).
+The whiteboard's render loop now sleeps the same way as the overlays' (D-038), and the ink
+preview (Settings → Cursor & ink → Preview) includes a value chip.
 
 ### D-042 · A dropped connection doesn't end the session
 Flaky Wi-Fi, a captive portal or a closed lid used to end the session after ~15 s of failed

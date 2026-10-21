@@ -613,6 +613,7 @@ export class VisualFeature {
     const specs: MarkSpec[] = [
       { kind: 'circle', rect: box(-330, -150, 220, 60), label: 'circle' },
       { kind: 'underline', rect: box(-330, -40, 300, 30) },
+      { kind: 'value', rect: box(-330, -40, 300, 30), text: 'n = 3' },
       { kind: 'highlight', rect: box(-330, 30, 260, 28) },
       { kind: 'arrow', rect: box(120, -120, 160, 50), text: 'look here!' },
       { kind: 'box', rect: box(120, 40, 200, 70) },
