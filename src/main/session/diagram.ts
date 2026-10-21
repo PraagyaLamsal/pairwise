@@ -38,13 +38,19 @@ interface Placed {
   rect: Rect;
 }
 
-const LABEL = 22;
 const TOP = 96; // below the title
 const MARGIN = 40;
 
+/** Text sizes on the board: typed (system font) labels are smaller than handwriting for the same weight. */
+export function boardSizes(font: InkItem['font'] = 'system') {
+  return font === 'hand' ? { title: 34, label: 22, small: 18, note: 20, edge: 18, index: 16 } : { title: 27, label: 18, small: 15, note: 16, edge: 15, index: 13 };
+}
+
+let FONT: InkItem['font'] = 'system';
+let LABEL = boardSizes().label;
+
 function nodeSize(label: string, size = LABEL): { w: number; h: number } {
-  // Caveat is narrower than the generic estimate.
-  return { w: Math.min(260, Math.max(58, approxTextWidth(label, size) * 0.86 + 34)), h: size * 1.9 };
+  return { w: Math.min(260, Math.max(58, approxTextWidth(label, size, FONT) + 34)), h: Math.max(size * 1.9, 40) };
 }
 
 /** Roots first, then breadth-first (children in edge order). */
@@ -145,7 +151,7 @@ function layoutRow(spec: DiagramSpec, gap: number): Placed[] {
 
 function layoutArray(spec: DiagramSpec): Placed[] {
   const n = Math.max(1, spec.nodes.length);
-  const cell = Math.min(96, Math.max(46, ...spec.nodes.map((x) => approxTextWidth(x.label, LABEL) + 22)), (BOARD.width - 2 * MARGIN) / n);
+  const cell = Math.min(96, Math.max(46, ...spec.nodes.map((x) => approxTextWidth(x.label, LABEL, FONT) + 22)), (BOARD.width - 2 * MARGIN) / n);
   const x0 = (BOARD.width - cell * n) / 2;
   const cy = TOP + (BOARD.height - TOP) * 0.36;
   return spec.nodes.map((node, i) => ({ node, rect: { x: x0 + i * cell, y: cy - cell * 0.45, width: cell, height: cell * 0.9 } }));
@@ -167,13 +173,15 @@ function layoutGraph(spec: DiagramSpec): Placed[] {
 
 function layoutBoxes(spec: DiagramSpec): Placed[] {
   const n = Math.max(1, spec.nodes.length);
-  const w = Math.min(420, Math.max(220, ...spec.nodes.map((x) => approxTextWidth(x.label, LABEL) + 40)));
+  const w = Math.min(420, Math.max(220, ...spec.nodes.map((x) => approxTextWidth(x.label, LABEL, FONT) + 40)));
   const h = Math.min(70, (BOARD.height - TOP - MARGIN) / n - 12);
   const x = (BOARD.width - w) / 2 - 80;
   return spec.nodes.map((node, i) => ({ node, rect: { x, y: TOP + i * (h + 12), width: w, height: h } }));
 }
 
-export function layoutDiagram(spec: DiagramSpec): Placed[] {
+export function layoutDiagram(spec: DiagramSpec, font: InkItem['font'] = 'system'): Placed[] {
+  FONT = font;
+  LABEL = boardSizes(font).label;
   switch (spec.kind) {
     case 'tree':
       return layoutTree(spec);
@@ -196,17 +204,19 @@ export function layoutDiagram(spec: DiagramSpec): Placed[] {
  * Ink for a diagram (board coordinates): title, then each node followed by the edge that leads
  * to it — the order you'd draw it on a whiteboard while explaining.
  */
-export function diagramInk(spec: DiagramSpec, style: { color: string; accent: string; group: string }): InkItem[] {
-  const placed = layoutDiagram(spec);
+export function diagramInk(spec: DiagramSpec, style: { color: string; accent: string; group: string; font?: InkItem['font'] }): InkItem[] {
+  const font = style.font ?? 'system';
+  const sz = boardSizes(font);
+  const placed = layoutDiagram(spec, font);
   const rectOf = new Map(placed.map((p) => [p.node.id, p.rect]));
   const items: InkItem[] = [];
   const base = (kind: InkItem['kind'], extra: Partial<InkItem>): InkItem => {
     const id = inkId('wb');
-    const it: InkItem = { id, author: 'tutor', kind, color: style.color, surface: 'whiteboard', revealAt: 0, drawMs: 0, fadeAt: null, seed: seedFrom(id), group: style.group, ...extra };
+    const it: InkItem = { id, author: 'tutor', kind, color: style.color, surface: 'whiteboard', revealAt: 0, drawMs: 0, fadeAt: null, seed: seedFrom(id), group: style.group, ...(kind === 'text' ? { font } : {}), ...extra };
     it.drawMs = drawDurationFor(it);
     return it;
   };
-  if (spec.title) items.push(base('text', { text: spec.title, fontSize: 34, at: { x: MARGIN, y: 30 }, label: 'title' }));
+  if (spec.title) items.push(base('text', { text: spec.title, fontSize: sz.title, at: { x: MARGIN, y: 30 }, label: 'title' }));
   const drawnEdges = new Set<string>();
   const edgeInk = (e: DiagramEdge) => {
     const a = rectOf.get(e.from);
@@ -221,7 +231,7 @@ export function diagramInk(spec: DiagramSpec, style: { color: string; accent: st
     items.push(base('arrow', { from, to, bend: spec.kind === 'graph' ? 0.12 : 0, label: e.label }));
     if (e.label) {
       const mid: Point = { x: (from.x + to.x) / 2 + 8, y: (from.y + to.y) / 2 - 16 };
-      items.push(base('text', { text: e.label, fontSize: 18, at: mid, color: style.accent }));
+      items.push(base('text', { text: e.label, fontSize: sz.edge, at: mid, color: style.accent }));
     }
   };
   placed.forEach((p, i) => {
@@ -229,14 +239,14 @@ export function diagramInk(spec: DiagramSpec, style: { color: string; accent: st
     // Edges into this node from nodes already drawn come first ("…which calls…").
     for (const e of spec.edges) if (e.to === p.node.id && placed.slice(0, i).some((q) => q.node.id === e.from)) edgeInk(e);
     items.push(base('box', { rect: { x: r.x + 6, y: r.y + 6, width: r.width - 12, height: r.height - 12 }, label: p.node.label }));
-    const size = spec.kind === 'tree' && placed.length > 6 ? 18 : LABEL;
+    const size = spec.kind === 'tree' && placed.length > 6 ? sz.small : sz.label;
     items.push(base('text', { text: p.node.label, fontSize: size, align: 'center', at: { x: r.x + r.width / 2, y: r.y + r.height / 2 } }));
-    if (spec.kind === 'array') items.push(base('text', { text: String(i), fontSize: 16, align: 'center', at: { x: r.x + r.width / 2, y: r.y + r.height + 16 }, color: style.accent }));
+    if (spec.kind === 'array') items.push(base('text', { text: String(i), fontSize: sz.index, align: 'center', at: { x: r.x + r.width / 2, y: r.y + r.height + 16 }, color: style.accent }));
     if (p.node.highlight) items.push(base('circle', { rect: r, color: style.accent }));
     if (p.node.note) {
       const right = r.x + r.width + 16;
-      const at = right + approxTextWidth(p.node.note, 20) < BOARD.width - 10 ? { x: right, y: r.y + r.height / 2 - 12 } : { x: Math.max(10, r.x), y: r.y + r.height + 10 };
-      items.push(base('text', { text: p.node.note, fontSize: 20, at, color: style.accent }));
+      const at = right + approxTextWidth(p.node.note, sz.note, font) < BOARD.width - 10 ? { x: right, y: r.y + r.height / 2 - sz.note * 0.6 } : { x: Math.max(10, r.x), y: r.y + r.height + 10 };
+      items.push(base('text', { text: p.node.note, fontSize: sz.note, at, color: style.accent }));
     }
   });
   for (const e of spec.edges) edgeInk(e); // anything not drawn yet (cycles, back edges)
@@ -245,7 +255,7 @@ export function diagramInk(spec: DiagramSpec, style: { color: string; accent: st
     if (last && !/^(none|null|nil)$/i.test(last.node.label) && !spec.edges.some((e) => e.from === last.node.id)) {
       const from = { x: last.rect.x + last.rect.width, y: last.rect.y + last.rect.height / 2 };
       items.push(base('arrow', { from, to: { x: from.x + 50, y: from.y } }));
-      items.push(base('text', { text: 'None', fontSize: 20, at: { x: from.x + 56, y: from.y - 12 }, color: style.accent }));
+      items.push(base('text', { text: 'None', fontSize: sz.note, at: { x: from.x + 56, y: from.y - sz.note * 0.6 }, color: style.accent }));
     }
   }
   return items;

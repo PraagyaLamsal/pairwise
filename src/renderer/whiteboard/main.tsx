@@ -151,7 +151,7 @@ function Board() {
         renderer.render(ctx, list, now, dpr * scale);
         if (live.current && live.current.length) {
           renderer.forget('__live__');
-          const pts = live.current.length === 1 ? [live.current[0], { x: live.current[0].x + 0.5, y: live.current[0].y }] : live.current;
+          const pts = live.current;
           renderer.render(ctx, [{ id: '__live__', author: 'student', kind: 'stroke', color: studentColorRef.current, surface: 'whiteboard', points: pts, revealAt: 0, drawMs: 1, seed: 1 }], now, dpr * scale);
         }
         dirty = false;
@@ -209,7 +209,8 @@ function Board() {
     const pts = live.current;
     live.current = null;
     setDrawing(false);
-    if (pts && pts.length) ipc.send('whiteboard:stroke', { id: `ws-${Date.now()}`, points: pts.length === 1 ? [pts[0], { x: pts[0].x + 0.5, y: pts[0].y + 0.5 }] : pts, times: [], straight: false, displayId: '', surface: 'whiteboard' });
+    // A click without a drag is a dot, like Tuple's paint.
+    if (pts && pts.length) ipc.send('whiteboard:stroke', { id: `ws-${Date.now()}`, points: pts, times: [], straight: false, displayId: '', surface: 'whiteboard' });
     dirty = true;
   };
 

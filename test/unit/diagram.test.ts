@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD, diagramInk, layoutDiagram, type DiagramSpec } from '../../src/main/session/diagram';
+import { BOARD, boardSizes, diagramInk, layoutDiagram, type DiagramSpec } from '../../src/main/session/diagram';
 
 const inside = (r: { x: number; y: number; width: number; height: number }) => r.x >= 0 && r.y >= 0 && r.x + r.width <= BOARD.width && r.y + r.height <= BOARD.height;
 const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -56,6 +56,6 @@ describe('diagram layouts', () => {
     expect(list.some((i) => i.kind === 'text' && i.text === 'None')).toBe(true);
     const arr = diagramInk({ kind: 'array', nodes: [{ id: 'a', label: '3' }, { id: 'b', label: '7' }, { id: 'c', label: '9' }], edges: [{ from: 'a', to: 'b' }] }, { color: '#2F7BFF', accent: '#FFB224', group: 'g' });
     expect(arr.some((i) => i.kind === 'arrow')).toBe(false);
-    expect(arr.filter((i) => i.kind === 'text' && /^\d$/.test(i.text ?? '') && i.fontSize === 16).map((i) => i.text)).toEqual(['0', '1', '2']);
+    expect(arr.filter((i) => i.kind === 'text' && /^\d$/.test(i.text ?? '') && i.fontSize === boardSizes().index).map((i) => i.text)).toEqual(['0', '1', '2']);
   });
 });

@@ -118,27 +118,6 @@ function applyInk(op: InkOp): void {
   dirty = true;
 }
 
-/** Comet trail behind the cursor during a swoop: a tapered, fading streak of the tutor's color. */
-function drawTrail(c: CanvasRenderingContext2D, pts: { p: { x: number; y: number }; a: number }[], color: string, scale: number): void {
-  c.save();
-  c.lineCap = 'round';
-  c.shadowColor = color;
-  c.shadowBlur = 10 * scale;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
-    const k = b.a;
-    c.globalAlpha = 0.5 * k * k;
-    c.strokeStyle = color;
-    c.lineWidth = 1 + 5 * k;
-    c.beginPath();
-    c.moveTo(a.p.x, a.p.y);
-    c.lineTo(b.p.x, b.p.y);
-    c.stroke();
-  }
-  c.restore();
-}
-
 function liveStrokeItem(): InkItem | null {
   const s = draw.current;
   if (!s || s.points.length < 1) return null;
@@ -148,7 +127,8 @@ function liveStrokeItem(): InkItem | null {
     kind: 'stroke',
     color: draw.color,
     surface: 'screen',
-    points: s.points.length === 1 ? [s.points[0], { x: s.points[0].x + 0.5, y: s.points[0].y }] : s.points,
+    // A single click is a dot (the renderer draws a stroke with no length as one).
+    points: s.points,
     revealAt: 0,
     drawMs: 1,
     seed: 1,
@@ -170,8 +150,7 @@ function frame(): void {
     }
     const list = [...items.values()];
     const live = liveStrokeItem();
-    const trail = cursor.trail(now);
-    const animating = renderer.animating(list, now) || celebrations.active || live !== null || trail.length > 0 || cursor.animating;
+    const animating = renderer.animating(list, now) || celebrations.active || live !== null || cursor.animating;
     if (dirty || animating || wasAnimating) {
       const b = init.display.bounds;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -182,7 +161,6 @@ function frame(): void {
         renderer.forget('__live__');
         renderer.render(ctx, [live], now, dpr);
       }
-      if (trail.length > 1) drawTrail(ctx, trail, init.tutorColor, dpr);
       celebrations.render(ctx, now, dpr, renderer.fontFamily);
       dirty = false;
     }

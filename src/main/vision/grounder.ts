@@ -117,7 +117,10 @@ export function runTesseract(image: Uint8Array, mime: string, extra: string[] = 
   const file = join(dir, mime === 'image/png' ? 'f.png' : 'f.jpg');
   writeFileSync(file, image);
   return new Promise((resolve) => {
-    execFile('tesseract', [file, 'stdout', '--psm', '11', ...extra, 'tsv'], { timeout: 15_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    // Several passes run at once; tesseract's OpenMP threads then fight over the cores and a
+    // pass that takes 0.25 s alone can stall for 30 s+ (seen on a 4-core machine). One thread each.
+    const opts = { timeout: 15_000, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, OMP_THREAD_LIMIT: '1' } };
+    execFile('tesseract', [file, 'stdout', '--psm', '11', ...extra, 'tsv'], opts, (err, stdout) => {
       rmSync(dir, { recursive: true, force: true });
       if (err) return resolve([]);
       const words: OcrWord[] = [];

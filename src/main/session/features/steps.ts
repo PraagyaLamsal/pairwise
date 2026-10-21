@@ -98,7 +98,7 @@ export class StepsFeature {
       if (rect) {
         const tip = pointTip(rect);
         const c = this.s.cursor;
-        c.cancelFuture(Date.now(), false);
+        c.cancelFuture(Date.now());
         c.schedule([{ kind: 'fly', to: tip, label }], Math.max(Date.now(), at), label, 60_000);
         // A ring that keeps breathing around the target until the step is done.
         const ring: InkItem = {
@@ -209,6 +209,8 @@ export class StepsFeature {
     this.watch = null;
     for (const c of w.cleanup) c();
     if (w.ringId) this.s.ink.fade({ ids: [w.ringId] });
+    // Done waiting: the cursor stays put but steps back (dims) instead of holding its label.
+    this.s.cursor.relax();
     if (this.s.snapshot.activity === 'waiting') this.s.setActivity('idle');
     log.info(`step ${result.done ? 'done' : 'not done'}: ${result.how}`);
     w.resolve(result);

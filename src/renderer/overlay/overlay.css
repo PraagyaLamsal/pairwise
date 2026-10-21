@@ -60,153 +60,73 @@ body.drawing::after {
   opacity: 0;
 }
 
-/* ---------- the buddy cursor ---------- */
+/* ---------- the tutor's cursor ---------- */
+/* A person's cursor on a pairing call: flat arrow, white edge, a name label only while busy. */
 .buddy {
   position: fixed;
   left: 0;
   top: 0;
   z-index: 50;
   pointer-events: none;
-  will-change: transform;
-  transition: opacity 180ms ease;
+  will-change: transform, opacity;
+  /* coming back is quick … */
+  transition: opacity 140ms ease-out;
 }
 .buddy.hidden {
   opacity: 0;
 }
-.buddy-shape {
+/* … fading away is slow, so it never "blinks" */
+.buddy.p-idle {
+  opacity: 0.35;
+  transition: opacity 520ms ease-in-out;
+}
+.buddy.p-near {
+  opacity: 0.12;
+  transition: opacity 260ms ease-out;
+}
+.buddy.hidden.p-idle,
+.buddy.hidden.p-near {
+  opacity: 0;
+}
+.buddy-arrow {
   position: absolute;
   left: 0;
   top: 0;
-  width: 28px;
-  height: 28px;
-  transform-origin: 3px 3px;
-  --glow-boost: 0;
-  filter: drop-shadow(0 0 calc(4px + var(--glow-boost) * 10px) var(--buddy-glow)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
-  will-change: transform, filter;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.38));
 }
-.buddy.act-speaking .buddy-shape {
-  animation: buddy-breathe 1.6s ease-in-out infinite;
-}
-@keyframes buddy-breathe {
-  50% {
-    filter: drop-shadow(0 0 11px var(--buddy-glow)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.35)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
-  }
-}
-.buddy.tracing .buddy-label {
-  opacity: 0;
-  transform: scale(0.8);
-}
-.buddy-tri {
-  position: absolute;
-  inset: 0;
-  transition: opacity 160ms, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.buddy-wave,
-.buddy-spin {
-  position: absolute;
-  left: -2px;
-  top: -2px;
-  opacity: 0;
-  transition: opacity 160ms;
-}
-.buddy-wave {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 18px;
-  left: -4px;
-  top: -6px;
-}
-.buddy-wave span {
-  width: 3px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--buddy);
-  transform: scaleY(0.3);
-}
-.buddy-spin {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0deg, var(--buddy) 300deg, var(--buddy-hi) 360deg);
-  -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px);
-  mask: radial-gradient(circle, transparent 4.5px, #000 5px);
-  animation: buddy-spin 0.75s linear infinite;
-}
-@keyframes buddy-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.buddy.act-listening .buddy-tri,
-.buddy.act-thinking .buddy-tri {
-  opacity: 0;
-  transform: scale(0.4);
-}
-.buddy.act-listening .buddy-wave {
-  opacity: 1;
-}
-.buddy.act-thinking .buddy-spin {
-  opacity: 1;
-}
-.buddy.flying .buddy-wave,
-.buddy.flying .buddy-spin {
-  opacity: 0;
-}
-.buddy.flying .buddy-tri {
-  opacity: 1;
-  transform: none;
-}
-
 .buddy-label {
   position: absolute;
-  left: 19px;
-  top: 22px;
+  left: 17px;
+  top: 21px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, var(--buddy-hi) -60%, var(--buddy) 70%);
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--buddy);
   color: #fff;
-  font-size: 12px;
-  font-weight: 640;
+  font-size: 11.5px;
+  font-weight: 650;
   letter-spacing: -0.005em;
   white-space: nowrap;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
-  box-shadow: 0 0 14px var(--buddy-glow-soft), 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 4px 10px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transform-origin: 0 0;
-  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms;
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
-.buddy-label.pop {
-  animation: label-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes label-pop {
-  from {
-    transform: scale(0.5);
-    box-shadow: 0 0 26px var(--buddy-glow);
-  }
-}
-.buddy.flying .buddy-label {
-  opacity: 0;
-  transform: scale(0.7);
-}
-.buddy-label-wave {
+.buddy-label.empty {
   display: none;
-  align-items: center;
-  gap: 2px;
-  height: 11px;
 }
-.buddy-label.speaking .buddy-label-wave {
-  display: inline-flex;
+/* The label shows only while she is doing something, and never while the cursor is moving. */
+.buddy.p-idle .buddy-label,
+.buddy.p-near .buddy-label,
+.buddy.moving .buddy-label {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 220ms ease-in, transform 220ms ease-in;
 }
-.buddy-label-wave span {
-  width: 2px;
-  height: 11px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.92);
-  transform: scaleY(0.3);
+.buddy.act-driving .buddy-label {
+  color: #2a1a00;
 }
 
 /* ---------- UI layer ---------- */

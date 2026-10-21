@@ -137,14 +137,14 @@ function LookSection({ s, update }: SectionProps) {
         <Row title="Your ink color" help="What you draw while asking.">
           <input className="color-input" type="color" value={s.studentInkColor} onChange={(e) => void update({ studentInkColor: e.target.value })} />
         </Row>
-        <Row title="Between explanations" help="Follow keeps the cursor beside yours. Stay leaves it where it last pointed.">
+        <Row title={`${s.tutorName} writes notes`} help="Typed in the system font, like Tuple's text tool — or in handwriting.">
           <Segmented
-            value={s.cursorBehavior}
+            value={s.noteStyle}
             options={[
-              { value: 'follow', label: 'Follow me' },
-              { value: 'stay', label: 'Stay put' },
+              { value: 'typed', label: 'Typed (like Tuple)' },
+              { value: 'handwritten', label: 'Handwritten' },
             ]}
-            onChange={(cursorBehavior) => void update({ cursorBehavior })}
+            onChange={(noteStyle) => void update({ noteStyle })}
           />
         </Row>
       </Group>

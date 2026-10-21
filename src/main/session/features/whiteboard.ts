@@ -6,7 +6,8 @@ import type { StudentStroke } from '@shared/ipc';
 import type { TutorSession } from '../tutor';
 import { InkManager } from '../ink';
 import type { CursorStep } from '../cursor';
-import { BOARD, boardPoint, diagramInk, type DiagramEdge, type DiagramKind, type DiagramNode } from '../diagram';
+import { BOARD, boardPoint, boardSizes, diagramInk, type DiagramEdge, type DiagramKind, type DiagramNode } from '../diagram';
+import { noteFont } from '../marks';
 import { WhiteboardWindow } from '../../windows/whiteboard';
 import { logger } from '../../log';
 
@@ -185,7 +186,7 @@ export class WhiteboardFeature {
       if (args.clear !== false && this.ink.all().some((i) => i.author === 'tutor')) this.clear();
       await new Promise((r) => setTimeout(r, 120)); // let the window settle before mapping the pen
       const title = str(args.title);
-      const items = diagramInk({ kind, nodes, edges, title: title || undefined }, { color: this.s.settings.tutorColor, accent: '#FFB224', group: this.group() });
+      const items = diagramInk({ kind, nodes, edges, title: title || undefined }, { color: this.s.settings.tutorColor, accent: '#FFB224', group: this.group(), font: noteFont(this.s.settings.noteStyle) });
       const end = this.play(items, this.s.visual.speechTime());
       this.keepSnapshot(title || `${kind} diagram`, end);
       log.info(`diagram ${kind}: ${nodes.length} nodes, ${edges.length} edges`);
@@ -217,7 +218,10 @@ export class WhiteboardFeature {
         const id = inkId('wb');
         const base: InkItem = { id, author: 'tutor', kind: 'text', color, surface: 'whiteboard', revealAt: 0, drawMs: 0, fadeAt: null, seed: id.length * 7 + items.length, group };
         let it: InkItem | null = null;
-        if (k === 'text' && str(m.text)) it = { ...base, kind: 'text', text: str(m.text).slice(0, 80), fontSize: 26, at: p };
+        if (k === 'text' && str(m.text)) {
+          const font = noteFont(this.s.settings.noteStyle);
+          it = { ...base, kind: 'text', text: str(m.text).slice(0, 80), fontSize: boardSizes(font).label + 4, font, at: p };
+        }
         else if (k === 'arrow' || k === 'line') it = { ...base, kind: k, from: p, to: q, bend: k === 'arrow' ? 0.15 : 0 };
         else if (k === 'circle' || k === 'box' || k === 'underline') it = { ...base, kind: k, rect: { x: Math.min(p.x, q.x), y: Math.min(p.y, q.y), width: Math.max(20, Math.abs(q.x - p.x)), height: Math.max(k === 'underline' ? 8 : 20, Math.abs(q.y - p.y)) } };
         else if (k === 'check' || k === 'cross') it = { ...base, kind: k, at: p, fontSize: 30 };

@@ -33,11 +33,12 @@ export interface InkItem {
   from?: Point;
   to?: Point;
   points?: Point[];
-  pressures?: number[];
   at?: Point;
   text?: string;
   num?: number;
   fontSize?: number;
+  /** Text: typed in the system font (default, like Tuple) or handwritten. */
+  font?: 'system' | 'hand';
   /** Text: 'center' = `at` is the centre of the first line (diagram labels). */
   align?: 'center';
   width?: number;
@@ -59,6 +60,13 @@ export interface InkItem {
 
 export type CursorActivity = 'idle' | 'listening' | 'thinking' | 'speaking' | 'waiting' | 'driving';
 
+/**
+ * How present the tutor's cursor is: `active` while it moves or shows a label, `idle` (dimmed,
+ * no label) when it is just resting where it was left, `near` (almost transparent) when the
+ * student's pointer comes close, so it never sits on top of what they are doing.
+ */
+export type CursorPresence = 'active' | 'idle' | 'near';
+
 export interface CursorFrame {
   /** Global DIP position of the cursor tip. */
   pos: Point;
@@ -75,6 +83,9 @@ export interface CursorFrame {
   labelSeq: number;
   /** 0..1 audio level for the waveform states. */
   level: number;
+  presence: CursorPresence;
+  /** The student's own pointer (global DIP): overlays fade what it comes close to. */
+  mouse: Point;
   t: number;
 }
 
@@ -89,11 +100,15 @@ export interface CursorFlight {
 
 /**
  * The tutor's cursor drawing an ink item: from `startAt` for `duration` ms the cursor tip follows
- * the item's own stroke path, with the same easing the renderer uses to reveal the ink — so the
- * cursor really is the pen.
+ * the item's own stroke path, with the same timing the renderer uses to reveal the ink — so the
+ * cursor really is the pen. Without an item, a pointer-only gesture: the tip glides along `path`
+ * (following a line of text, sweeping down a list) and nothing is drawn.
  */
 export interface CursorTrace {
-  itemId: string;
+  itemId?: string;
+  path?: Point[];
+  /** Gesture pacing: glide (ease in/out), read (steady, like following a line), sweep (line by line). */
+  style?: 'glide' | 'read' | 'sweep';
   startAt: number;
   duration: number;
   /** Where the trace ends (global DIP), so overlays can park there without the item. */

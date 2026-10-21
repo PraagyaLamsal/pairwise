@@ -4,7 +4,8 @@ import { DEFAULT_SHORTCUTS, type ShortcutAction } from './shortcuts';
 export type TalkMode = 'hands-free' | 'push-to-talk';
 export type SpeakingSpeed = 'slower' | 'normal' | 'faster';
 export type ExplanationDepth = 'brief' | 'standard' | 'deep';
-export type CursorBehavior = 'follow' | 'stay';
+/** How Ada writes notes on screen: typed in the system font (like Tuple) or handwritten. */
+export type NoteStyle = 'typed' | 'handwritten';
 export type InkFade = 'after-speech' | 'manual';
 export type AutoPauseMedia = 'smart' | 'media-key' | 'off';
 export type LiveMediaResolution = 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
@@ -36,7 +37,7 @@ export interface Settings {
   captions: boolean;
   tutorColor: string;
   studentInkColor: string;
-  cursorBehavior: CursorBehavior;
+  noteStyle: NoteStyle;
   inkFade: InkFade;
   inkFadeDelaySec: number;
   autoPauseMedia: AutoPauseMedia;
@@ -72,7 +73,8 @@ export interface Settings {
   liveMediaResolution: LiveMediaResolution;
   onboardingComplete: boolean;
   lastCourseId?: string;
-  hudPosition?: { x: number; y: number; displayId?: string };
+  /** Where the session bar was dragged to, per display (global DIP of its top-left corner). */
+  hudPositions?: Record<string, { x: number; y: number }>;
   launchAtLogin: boolean;
 }
 
@@ -88,7 +90,12 @@ export const DEFAULT_VEIL_APPS: VeilApp[] = [
   { bundleId: 'com.apple.mail', name: 'Mail' },
 ];
 
-export const SETTINGS_VERSION = 1;
+/**
+ * 2 (round 2): captions off by default (a quieter screen), the cursor always stays put (the
+ * follow option is gone), notes are typed unless the student picks handwriting, and the
+ * session bar remembers a position per display.
+ */
+export const SETTINGS_VERSION = 2;
 
 export function defaultSettings(): Settings {
   return {
@@ -99,10 +106,10 @@ export function defaultSettings(): Settings {
     playbackRate: 1,
     explanationDepth: 'standard',
     talkMode: 'hands-free',
-    captions: true,
+    captions: false,
     tutorColor: '#2F7BFF',
     studentInkColor: '#FF8A1F',
-    cursorBehavior: 'follow',
+    noteStyle: 'typed',
     inkFade: 'after-speech',
     inkFadeDelaySec: 6,
     autoPauseMedia: 'smart',
@@ -136,7 +143,7 @@ export function mergeSettings(stored: unknown, base: Settings = defaultSettings(
       const out: Record<string, unknown> = {};
       for (const k of Object.keys(def)) out[k] = merge(def[k], val[k]);
       // optional keys that are absent from defaults but valid
-      for (const k of ['lastCourseId', 'hudPosition']) if (k in val && !(k in def)) out[k] = val[k];
+      for (const k of ['lastCourseId', 'hudPositions']) if (k in val && !(k in def)) out[k] = val[k];
       return out;
     }
     if (Array.isArray(def)) return Array.isArray(val) ? val : def;
@@ -144,11 +151,23 @@ export function mergeSettings(stored: unknown, base: Settings = defaultSettings(
     return typeof val === typeof def ? val : def;
   };
   const merged = merge(base, stored) as Settings;
+  const from = isObject(stored) && typeof stored['version'] === 'number' ? stored['version'] : SETTINGS_VERSION;
+  if (isObject(stored) && from < 2) {
+    // Round 2 declutter: captions start hidden (one tap or ⌃⌥T brings them back).
+    merged.captions = false;
+    const old = stored['hudPosition'];
+    if (isObject(old) && typeof old['displayId'] === 'string' && typeof old['x'] === 'number' && typeof old['y'] === 'number') {
+      merged.hudPositions = { [old['displayId']]: { x: old['x'], y: old['y'] } };
+    }
+  }
   merged.version = SETTINGS_VERSION;
   merged.playbackRate = Math.min(1.4, Math.max(0.75, Number(merged.playbackRate) || 1));
   merged.inkFadeDelaySec = Math.min(60, Math.max(1, merged.inkFadeDelaySec));
   merged.budget.monthlyLimitUsd = Math.max(0, merged.budget.monthlyLimitUsd);
-  if (isObject(stored) && isObject(stored['hudPosition'])) merged.hudPosition = stored['hudPosition'] as Settings['hudPosition'];
+  if (isObject(stored) && isObject(stored['hudPositions'])) {
+    const ok = Object.entries(stored['hudPositions']).filter(([, v]) => isObject(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']));
+    merged.hudPositions = { ...(merged.hudPositions ?? {}), ...Object.fromEntries(ok.map(([k, v]) => [k, { x: Number((v as { x: number }).x), y: Number((v as { y: number }).y) }])) };
+  }
   if (isObject(stored) && typeof stored['lastCourseId'] === 'string') merged.lastCourseId = stored['lastCourseId'];
   return merged;
 }

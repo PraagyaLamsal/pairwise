@@ -3,7 +3,7 @@ import { inkId, type InkItem } from '@shared/ink';
 import { inkPenPoint } from '@shared/ink-geometry';
 import type { EncodedFrame } from '@shared/ipc';
 import type { TutorSession } from '../tutor';
-import { buildInk, pointTip, type MarkSpec } from '../marks';
+import { buildInk, noteFont, pointTip, type MarkSpec } from '../marks';
 import { BeatSync } from '../beat-sync';
 import { GeminiBackend, Grounder, OcrBackend, type FrameSource, type GroundTarget, type GroundingBackend } from '../../vision/grounder';
 import { ScreenReader } from '../../vision/reader';
@@ -126,7 +126,7 @@ export class VisualFeature {
   }
 
   private style() {
-    return { color: this.s.settings.tutorColor, author: 'tutor' as const, surface: 'screen' as const, group: this.group() };
+    return { color: this.s.settings.tutorColor, author: 'tutor' as const, surface: 'screen' as const, group: this.group(), font: noteFont(this.s.settings.noteStyle) };
   }
 
   /**
@@ -395,7 +395,7 @@ export class VisualFeature {
     const now = Date.now();
     if (c.busyUntil > now) {
       const startsLater = at > now + 40;
-      c.cancelFuture(now, false);
+      c.cancelFuture(now);
       c.schedule([{ kind: 'fly', to: tip, label, maxMs: startsLater ? 1100 : 450 }], startsLater ? at : now, label);
     } else {
       c.schedule([{ kind: 'fly', to: tip, label }], Math.max(now, at), label);

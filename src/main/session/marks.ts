@@ -22,9 +22,19 @@ export interface MarkStyle {
   author: 'tutor' | 'student';
   surface: 'screen' | 'whiteboard';
   group?: string;
+  /** Notes typed in the system font (default) or handwritten. */
+  font?: InkItem['font'];
 }
 
-const NOTE_SIZE = 27;
+/** The ink font for the "Ada writes notes" setting. */
+export function noteFont(style: 'typed' | 'handwritten'): 'system' | 'hand' {
+  return style === 'handwritten' ? 'hand' : 'system';
+}
+
+/** Note size: typed notes read like Tuple's text annotations; handwriting needs to be larger. */
+export function noteSize(font: InkItem['font'] = 'system'): number {
+  return font === 'hand' ? 27 : 19;
+}
 
 /** Directions to try for an arrow's tail, in order of preference (screen-up-ish first). */
 const ARROW_DIRS = [
@@ -82,10 +92,11 @@ export function arrowTail(target: Rect, display: Rect, avoid: Rect[] = [], lengt
   return best ? (best as { p: Point }).p : clampPointInside({ x: c.x + reach, y: c.y - reach * 0.6 }, display);
 }
 
-/** Where a handwritten note goes next to a target (right, else left, else above/below). */
-export function notePosition(target: Rect, text: string, display: Rect, size = NOTE_SIZE): Point {
-  const w = Math.min(approxTextWidth(text, size), size * 16);
-  const h = size * 1.1;
+/** Where a note goes next to a target (right, else left, else above/below). */
+export function notePosition(target: Rect, text: string, display: Rect, font: InkItem['font'] = 'system'): Point {
+  const size = noteSize(font);
+  const w = Math.min(approxTextWidth(text, size, font), size * 16);
+  const h = size * 1.25;
   const right = { x: target.x + target.width + 16, y: target.y + target.height / 2 - h / 2 };
   if (right.x + w < display.x + display.width - 12) return right;
   const left = { x: target.x - 16 - w, y: right.y };
@@ -134,7 +145,7 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
         item = { ...base, from, to, bend: 0.18 * (from.x < to.x ? 1 : -1) };
         if (s.text) {
           // Arrow with a note at its tail, written after the arrow is drawn.
-          after = { ...base, id: inkId('t'), kind: 'text', text: s.text, fontSize: NOTE_SIZE, at: tailNoteAt(from, to, s.text, display), seed: seedFrom(`${id}n`) };
+          after = { ...base, id: inkId('t'), kind: 'text', text: s.text, fontSize: noteSize(style.font), font: style.font ?? 'system', at: tailNoteAt(from, to, s.text, display, style.font), seed: seedFrom(`${id}n`) };
         }
         break;
       }
@@ -144,8 +155,8 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
       case 'text': {
         const text = (s.text ?? '').trim();
         if (!text) break;
-        const at = s.at ?? (s.rect ? notePosition(s.rect, text, display) : null);
-        if (at) item = { ...base, text, fontSize: NOTE_SIZE, at };
+        const at = s.at ?? (s.rect ? notePosition(s.rect, text, display, style.font) : null);
+        if (at) item = { ...base, text, fontSize: noteSize(style.font), font: style.font ?? 'system', at };
         break;
       }
       case 'step': {
@@ -171,16 +182,17 @@ export function buildInk(specs: MarkSpec[], display: Rect, style: MarkStyle): In
   return out;
 }
 
-function tailNoteAt(from: Point, to: Point, text: string, display: Rect): Point {
-  const w = approxTextWidth(text, NOTE_SIZE);
+function tailNoteAt(from: Point, to: Point, text: string, display: Rect, font: InkItem['font'] = 'system'): Point {
+  const size = noteSize(font);
+  const w = approxTextWidth(text, size, font);
   const dx = from.x - to.x;
   const dy = from.y - to.y;
   // Put the note beyond the tail, on the side away from the target.
   const p = {
     x: dx >= 0 ? from.x + 8 : from.x - w - 8,
-    y: dy >= 0 ? from.y + 4 : from.y - NOTE_SIZE * 1.1 - 4,
+    y: dy >= 0 ? from.y + 4 : from.y - size * 1.25 - 4,
   };
-  return clampPointInside(p, { x: display.x + 8, y: display.y + 8, width: display.width - w - 16, height: display.height - NOTE_SIZE * 1.3 - 16 });
+  return clampPointInside(p, { x: display.x + 8, y: display.y + 8, width: display.width - w - 16, height: display.height - size * 1.4 - 16 });
 }
 
 /** Where the cursor should point at a target: its centre for small things, near the start of wide ones. */

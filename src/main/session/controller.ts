@@ -49,10 +49,7 @@ export class SessionController extends EventEmitter {
   constructor(readonly deps: SessionDeps) {
     super();
     this.overlays = new OverlayManager((d) => this.overlayInit(d));
-    this.cursor = new CursorEngine(deps.platform.displays, deps.platform.hooks, {
-      name: () => this.settings.tutorName,
-      behavior: () => this.settings.cursorBehavior,
-    });
+    this.cursor = new CursorEngine(deps.platform.displays, deps.platform.hooks, { name: () => this.settings.tutorName });
     this.ink = new InkManager();
 
     this.cursor.on('frame', (f) => this.overlays.send('overlay:cursor', f));

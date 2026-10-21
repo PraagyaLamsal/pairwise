@@ -4,6 +4,7 @@ import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import { APP_ID, APP_NAME } from '@shared/app-info';
 import type { InvokeChannel, InvokeMap, SendMap } from '@shared/ipc';
 import { findConflicts } from '@shared/shortcuts';
+import { displayForPoint } from '@shared/geometry';
 import { env } from './env';
 import { initLogFile, logger } from './log';
 import { SettingsService } from './settings';
@@ -59,11 +60,13 @@ async function main(): Promise<void> {
   const engine = new EngineHost();
   const hub = new HubWindow();
   const hotkeys = new HotkeyService(settings.get().shortcuts, platform.hooks);
+  // The session bar opens on the display the student is working on, where they last put it.
   const hud = new HudWindow(() => {
     const s = settings.get();
-    const primary = platform.displays.primary();
-    const saved = s.hudPosition && platform.displays.byId(s.hudPosition.displayId ?? '') ? s.hudPosition : undefined;
-    return { display: primary, saved };
+    const display = displayForPoint(platform.displays.list(), platform.displays.cursor()) ?? platform.displays.primary();
+    const saved = s.hudPositions?.[display.id];
+    const fits = saved && saved.x >= display.bounds.x - 40 && saved.y >= display.bounds.y - 10 && saved.x < display.bounds.x + display.bounds.width - 60 && saved.y < display.bounds.y + display.bounds.height - 30;
+    return { display, saved: fits ? saved : undefined };
   });
 
   // Global hooks need Accessibility on macOS; start them as soon as it is granted.
@@ -208,7 +211,11 @@ async function main(): Promise<void> {
   });
   handle('hud:moveBy', (_e, dx, dy) => {
     const p = hud.moveBy(dx, dy);
-    if (p) settings.update({ hudPosition: { ...p, displayId: session.activeDisplay().id } });
+    const b = hud.bounds();
+    if (!p || !b) return;
+    // Remembered for the display the bar now sits on.
+    const d = displayForPoint(platform.displays.list(), { x: b.x + b.width / 2, y: b.y + b.height / 2 });
+    if (d) settings.update({ hudPositions: { [d.id]: p } });
   });
   handle('hud:setSize', (_e, w, h) => hud.setSize(w, h));
   handle('veil:runningApps', () => platform.runningApps());

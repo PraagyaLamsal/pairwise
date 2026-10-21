@@ -241,7 +241,9 @@ export class ScreenCapture {
     if (opts.composite) {
       const lw = Math.max(3, 5 * (w / region.width));
       for (const st of opts.composite.strokes) {
-        if (st.points.length < 2) continue;
+        if (!st.points.length) continue;
+        // A tap is a dot: a zero-length line with round caps.
+        if (st.points.length === 1) st.points = [st.points[0], st.points[0]];
         for (const pass of [{ c: 'rgba(0,0,0,0.65)', w: lw + 3 }, { c: opts.composite.color, w: lw }]) {
           ctx.strokeStyle = pass.c;
           ctx.lineWidth = pass.w;
