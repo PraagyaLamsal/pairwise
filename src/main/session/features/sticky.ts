@@ -1,4 +1,4 @@
-import { inflateRect, rectContains, rectsIntersect, type Rect } from '@shared/geometry';
+import { inflateRect, rectContains, rectsIntersect, unionRects, type Rect } from '@shared/geometry';
 import type { InkItem } from '@shared/ink';
 import { inkAnchor, inkCover } from '@shared/ink-geometry';
 import type { TrackGroup, TrackResult } from '@shared/ipc';
@@ -12,7 +12,10 @@ const log = logger('sticky');
 const TICK_MS = 250;
 /** …and half as often once nothing has moved for a while. */
 const QUIET_AFTER_MS = 2000;
-/** After a move, the old place stays masked a moment (the overlays may not have redrawn yet). */
+/**
+ * After a move, the way from the old place to the new stays masked a moment: the marks glide
+ * there, and a capture can catch them anywhere along it (or not yet redrawn).
+ */
 const RECENT_MS = 700;
 /** At most this many groups are followed (the newest). */
 const MAX_GROUPS = 8;
@@ -152,7 +155,8 @@ export class StickyInk {
     out.push(...this.s.overlays.uiRects());
     const hud = this.s.deps.hud.visible ? this.s.deps.hud.bounds() : null;
     if (hud) out.push(hud);
-    for (const it of items) out.push(...inkCover(it));
+    // (A little past each mark: a pill's soft edge spills over its box.)
+    for (const it of items) out.push(...inkCover(it).map((r) => inflateRect(r, 2)));
     out.push(...this.recent.map((r) => r.rect));
     return out;
   }
@@ -167,7 +171,10 @@ export class StickyInk {
       const dy = Math.round(t.dy * 2) / 2;
       const now = Date.now();
       if (this.overlaysCaptured) {
-        for (const it of this.s.ink.all()) if ((it.group ?? it.id) === t.key) for (const rect of inkCover(it)) this.recent.push({ rect, until: now + RECENT_MS });
+        for (const it of this.s.ink.all()) {
+          if ((it.group ?? it.id) !== t.key) continue;
+          for (const rect of inkCover(it)) this.recent.push({ rect: inflateRect(unionRects([rect, { ...rect, x: rect.x + dx, y: rect.y + dy }])!, 2), until: now + RECENT_MS });
+        }
       }
       const moved = this.s.ink.shift(this.filter(t.key), dx, dy, prefersReducedMotion() ? 0 : 140);
       this.s.visual.shiftWaiting(t.key, dx, dy);

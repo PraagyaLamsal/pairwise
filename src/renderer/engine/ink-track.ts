@@ -33,7 +33,7 @@ export interface Verdict {
   state: TrackState;
   /** moved: how far the content moved, in image pixels (+ = down; quarter-pixel steps). */
   dy: number;
-  /** moved: …and sideways (+ = right; whole pixels; a dragged window, a sideways scroll). */
+  /** moved: …and sideways (+ = right; half-pixel steps; a dragged window, a sideways scroll). */
   dx: number;
   /** Share of the group's texture that's unchanged where it was (0..1). */
   steady: number;
@@ -51,6 +51,11 @@ const T_STEADY = 0.16;
  * away), a pixel and a half ~1.1, unrelated content 1.5 and up.
  */
 const T_MATCH = 0.5;
+/**
+ * …and, for a move found by the search of the whole screen (a dragged window), this close: half
+ * a pixel off both ways, which an odd number of DIP sideways leaves, scores ~0.55.
+ */
+const T_MATCH_FAR = 0.75;
 /** An anchor scoring this badly where the rest went may not have come along (under a header, say). */
 const T_LOST = 0.8;
 /** Most of the texture has to agree that it's still there… */
@@ -160,14 +165,16 @@ const lastSeen = { share: 1 };
  * are interpolated): mean absolute difference over its own texture. `still` marks rows of
  * things that don't scroll (see BAND_MIN): a pixel that was on one, or would be under one, says
  * nothing about where the content went and isn't compared (`lastSeen.share` says how much could
- * be). `dx` (whole pixels) shifts it sideways too. When too little of it can be seen: Infinity;
- * when too little of that can be compared: NaN (masked).
+ * be). `dx` shifts it sideways too (fractions blend neighbouring columns). When too little of
+ * it can be seen: Infinity; when too little of that can be compared: NaN (masked).
  */
 function score(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1, still: Uint8Array | null = null, dx = 0): number {
   const W = cur.width;
   const H = cur.height;
   const fy = Math.floor(dy);
   const fr = dy - fy;
+  const fx = Math.floor(dx);
+  const frx = dx - fx;
   const hide = still !== null;
   let sum = 0;
   let n = 0;
@@ -175,15 +182,21 @@ function score(a: Anchor, cur: Gray, curMask: Uint8Array, dy: number, step = 1, 
   let hidden = 0;
   for (let k = 0; k < a.xs.length; k += step) {
     tried++;
-    const x = a.xs[k] + dx;
+    const x = a.xs[k] + fx;
     const y = a.ys[k] + fy;
-    if (x < 0 || x >= W || y < 0 || y >= H - 1 || (hide && (still![a.ys[k]] || still![y] || (fr && still![y + 1])))) {
+    if (x < 0 || x >= W - 1 || y < 0 || y >= H - 1 || (hide && (still![a.ys[k]] || still![y] || (fr && still![y + 1])))) {
       hidden++;
       continue;
     }
     const i = y * W + x;
     if (curMask[i] || (fr && curMask[i + W])) continue;
-    const c = fr ? cur.data[i] * (1 - fr) + cur.data[i + W] * fr : cur.data[i];
+    let c = fr ? cur.data[i] * (1 - fr) + cur.data[i + W] * fr : cur.data[i];
+    if (frx) {
+      // Sideways by part of a pixel too: blend with the next column.
+      if (curMask[i + 1] || (fr && curMask[i + W + 1])) continue;
+      const next = fr ? cur.data[i + 1] * (1 - fr) + cur.data[i + W + 1] * fr : cur.data[i + 1];
+      c = c * (1 - frx) + next * frx;
+    }
     sum += Math.abs(a.refs[k] - c);
     n++;
   }
@@ -245,65 +258,75 @@ function staticAt(a: Anchor, ref: Gray, refMask: Uint8Array, cur: Gray, curMask:
   return n >= a.xs.length * 0.3 && sum / n / Math.max(a.act, 3) < T_STEADY;
 }
 
-/** Means of `size`×`size` blocks of an image, worked out as they're asked for; -1 when mostly masked. */
-interface BlockGrid {
-  w: number;
-  h: number;
-  at(bx: number, by: number): number;
-}
-
-function blockGrid(img: Gray, mask: Uint8Array, size: number): BlockGrid {
-  const w = Math.floor(img.width / size);
-  const h = Math.floor(img.height / size);
-  const v = new Float32Array(w * h).fill(NaN);
-  return {
-    w,
-    h,
-    at(bx, by) {
-      const k = by * w + bx;
-      let m = v[k];
-      if (m !== m) {
-        let sum = 0;
-        let masked = 0;
-        for (let y = by * size; y < (by + 1) * size; y++) {
-          for (let x = bx * size, i = y * img.width + x; x < (bx + 1) * size; x++, i++) {
-            sum += img.data[i];
-            masked += mask[i];
-          }
-        }
-        m = v[k] = masked > (size * size) / 2 ? -1 : sum / (size * size);
-      }
-      return m;
-    },
+/**
+ * Means of any box of an image from summed-area tables (four look-ups each): `mean(x, y, w, h)`
+ * is -1 when the box is mostly masked or not all on the image.
+ */
+function boxMeans(img: Gray, mask: Uint8Array): { mean: (x: number, y: number, w: number, h: number) => number; sum: Uint32Array } {
+  const W = img.width;
+  const H = img.height;
+  const S = W + 1;
+  const sum = new Uint32Array(S * (H + 1));
+  const masked = new Uint32Array(S * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let rs = 0;
+    let rm = 0;
+    for (let x = 0, i = y * W; x < W; x++, i++) {
+      rs += img.data[i];
+      rm += mask[i];
+      sum[(y + 1) * S + x + 1] = sum[y * S + x + 1] + rs;
+      masked[(y + 1) * S + x + 1] = masked[y * S + x + 1] + rm;
+    }
+  }
+  const mean = (x: number, y: number, w: number, h: number) => {
+    if (x < 0 || y < 0 || x + w > W || y + h > H) return -1;
+    const a = y * S + x;
+    const b = a + w;
+    const c = a + h * S;
+    const d = c + w;
+    if (masked[d] - masked[b] - masked[c] + masked[a] > (w * h) / 2) return -1;
+    return (sum[d] - sum[b] - sum[c] + sum[a]) / (w * h);
   };
+  return { mean, sum };
 }
 
-/** The blocks wholly inside the boxes, as [bx, by, mean, …] (masked ones left out). */
-function blocksIn(g: BlockGrid, size: number, boxes: PxBox[]): number[] {
+/** Mean of a box of an image, worked out directly (for the few blocks of the marked areas); -1 when mostly masked. */
+function directMean(img: Gray, mask: Uint8Array, x: number, y: number, w: number, h: number): number {
+  if (x < 0 || y < 0 || x + w > img.width || y + h > img.height) return -1;
+  let sum = 0;
+  let masked = 0;
+  for (let r = y; r < y + h; r++) {
+    for (let i = r * img.width + x, e = i + w; i < e; i++) {
+      sum += img.data[i];
+      masked += mask[i];
+    }
+  }
+  return masked > (w * h) / 2 ? -1 : sum / (w * h);
+}
+
+/** The `size`×`size` blocks (on a `size` grid) wholly inside the boxes, as [x, y, mean, …] in pixels. */
+function blocksIn(mean: (x: number, y: number, w: number, h: number) => number, size: number, boxes: PxBox[]): number[] {
   const out: number[] = [];
   const taken = new Set<number>();
   for (const b of boxes) {
-    for (let by = Math.max(0, Math.ceil(b.y / size)); by < Math.min(g.h, Math.floor((b.y + b.h) / size)); by++) {
-      for (let bx = Math.max(0, Math.ceil(b.x / size)); bx < Math.min(g.w, Math.floor((b.x + b.w) / size)); bx++) {
-        const v = g.at(bx, by);
-        if (taken.has(by * g.w + bx) || v < 0) continue;
-        taken.add(by * g.w + bx);
-        out.push(bx, by, v);
+    for (let y = Math.ceil(b.y / size) * size; y + size <= b.y + b.h; y += size) {
+      for (let x = Math.ceil(b.x / size) * size; x + size <= b.x + b.w; x += size) {
+        const v = mean(x, y, size, size);
+        if (v < 0 || taken.has(y * 100_000 + x)) continue;
+        taken.add(y * 100_000 + x);
+        out.push(x, y, v);
       }
     }
   }
   return out;
 }
 
-/** Mean difference of `cells` (from blocksIn) against `g` moved by (sx, sy) blocks; Infinity if too little lands on it. */
-function blockCost(cells: number[], g: BlockGrid, sx: number, sy: number): number {
+/** Mean difference of `cells` (from blocksIn) against the image moved by (sx, sy) px; Infinity if too little lands on it. */
+function blockCost(cells: number[], mean: (x: number, y: number, w: number, h: number) => number, size: number, sx: number, sy: number): number {
   let sum = 0;
   let n = 0;
   for (let j = 0; j < cells.length; j += 3) {
-    const x = cells[j] + sx;
-    const y = cells[j + 1] + sy;
-    if (x < 0 || y < 0 || x >= g.w || y >= g.h) continue;
-    const v = g.at(x, y);
+    const v = mean(cells[j] + sx, cells[j + 1] + sy, size, size);
     if (v < 0) continue;
     sum += Math.abs(cells[j + 2] - v);
     n++;
@@ -313,15 +336,16 @@ function blockCost(cells: number[], g: BlockGrid, sx: number, sy: number): numbe
 
 /**
  * Where the content went when it moved sideways too (a dragged window, a sideways scroll): the
- * marked areas' 8×8-pixel block means against the whole screen at every offset, then 4×4 blocks
- * and single pixels around the best few, then quarter pixels vertically. The best place
- * (`dx` in whole pixels), its cost, the next best place's cost, the cost of not moving at all,
- * and how much of the group matches there.
+ * marked areas' 8×8-pixel block means against the whole screen every 4 px (a block is never
+ * more than a quarter off), then 4×4 blocks pixel by pixel around the best few, then single
+ * pixels, then half pixels sideways and quarter pixels down for the best. The best place, its
+ * cost, what the best other place (3 px or more away) costs by as much more, the cost of not
+ * moving at all, and how much of the group matches there.
  */
 function locate(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8Array, boxes: PxBox[], anchors: Anchor[], total: number): { dx: number; dy: number; cost: number; rival: number; here: number; match: number } | null {
-  const coarseRef = blockGrid(ref, refMask, 8);
-  const coarseCur = blockGrid(cur, curMask, 8);
-  const cells = blocksIn(coarseRef, 8, boxes);
+  const refMean = (x: number, y: number, w: number, h: number) => directMean(ref, refMask, x, y, w, h);
+  const { mean: curMean, sum: table } = boxMeans(cur, curMask);
+  const cells = blocksIn(refMean, 8, boxes);
   if (cells.length < 18) return null;
   let minX = Infinity;
   let maxX = -Infinity;
@@ -329,17 +353,33 @@ function locate(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8Array, 
   let maxY = -Infinity;
   for (let j = 0; j < cells.length; j += 3) {
     minX = Math.min(minX, cells[j]);
-    maxX = Math.max(maxX, cells[j]);
+    maxX = Math.max(maxX, cells[j] + 8);
     minY = Math.min(minY, cells[j + 1]);
-    maxY = Math.max(maxY, cells[j + 1]);
+    maxY = Math.max(maxY, cells[j + 1] + 8);
   }
-  // The best few offsets, at least two blocks apart.
+  // The best few offsets, at least 8 px apart. (Every cell stays on the image over this range,
+  // so the table is read directly; the screen's mask only counts from the next level on.)
+  const S = cur.width + 1;
+  const n = cells.length / 3;
+  const base = new Int32Array(n);
+  const want = new Float32Array(n);
+  for (let j = 0; j < n; j++) {
+    base[j] = cells[3 * j + 1] * S + cells[3 * j];
+    want[j] = cells[3 * j + 2] * 64;
+  }
   const best: { sx: number; sy: number; c: number }[] = [];
-  for (let sy = -minY; sy < coarseCur.h - maxY; sy++) {
-    for (let sx = -minX; sx < coarseCur.w - maxX; sx++) {
-      const c = blockCost(cells, coarseCur, sx, sy);
-      if (best.length === 6 && c >= best[5].c) continue;
-      const near = best.findIndex((q) => Math.abs(q.sx - sx) <= 1 && Math.abs(q.sy - sy) <= 1);
+  for (let sy = -Math.floor(minY / 4) * 4; sy <= cur.height - maxY; sy += 4) {
+    for (let sx = -Math.floor(minX / 4) * 4; sx <= cur.width - maxX; sx += 4) {
+      const off = sy * S + sx;
+      const bound = best.length === 6 ? best[5].c * n * 64 : Infinity;
+      let sum = 0;
+      for (let j = 0; j < n && sum < bound; j++) {
+        const a = base[j] + off;
+        sum += Math.abs(want[j] - (table[a + 8 * S + 8] - table[a + 8] - table[a + 8 * S] + table[a]));
+      }
+      if (sum >= bound) continue;
+      const c = sum / n / 64;
+      const near = best.findIndex((q) => Math.abs(q.sx - sx) < 8 && Math.abs(q.sy - sy) < 8);
       if (near >= 0) {
         if (c >= best[near].c) continue;
         best.splice(near, 1);
@@ -350,46 +390,50 @@ function locate(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8Array, 
     }
   }
   if (!best.length || !Number.isFinite(best[0].c)) return null;
-  // 4×4 blocks within a coarse block of each.
-  const midRef = blockGrid(ref, refMask, 4);
-  const midCur = blockGrid(cur, curMask, 4);
-  const midCells = blocksIn(midRef, 4, boxes);
+  // 4×4 blocks, every pixel within a coarse step of each.
+  const midCells = blocksIn(refMean, 4, boxes);
   const mid = best
     .map((b) => {
-      let at = { sx: b.sx * 2, sy: b.sy * 2, c: Infinity };
-      for (let sy = b.sy * 2 - 2; sy <= b.sy * 2 + 2; sy++) {
-        for (let sx = b.sx * 2 - 2; sx <= b.sx * 2 + 2; sx++) {
-          const c = blockCost(midCells, midCur, sx, sy);
+      let at = { sx: b.sx, sy: b.sy, c: Infinity };
+      for (let sy = b.sy - 4; sy <= b.sy + 4; sy++) {
+        for (let sx = b.sx - 4; sx <= b.sx + 4; sx++) {
+          const c = blockCost(midCells, curMean, 4, sx, sy);
           if (c < at.c) at = { sx, sy, c };
         }
       }
       return at;
     })
     .sort((p, q) => p.c - q.c)
+    .filter((m, i, all) => all.findIndex((o) => Math.abs(o.sx - m.sx) < 3 && Math.abs(o.sy - m.sy) < 3) === i)
     .slice(0, 3);
-  // Single pixels, then quarter pixels vertically.
+  // Single pixels, then half pixels sideways (a window moved by an odd number of DIP) and
+  // quarter pixels down.
   const step = Math.max(2, Math.ceil(anchors.reduce((s, a) => s + a.xs.length, 0) / 1500));
   const cost = (dx: number, dy: number, st = 1) => anchors.reduce((s, a) => s + a.weight * capped(score(a, cur, curMask, dy, st, null, dx)), 0) / total;
-  const fine = mid
+  const whole = mid
     .map((m) => {
-      let at = { dx: m.sx * 4, dy: m.sy * 4, c: Infinity };
-      for (let dy = m.sy * 4 - 4; dy <= m.sy * 4 + 4; dy++) {
-        for (let dx = m.sx * 4 - 4; dx <= m.sx * 4 + 4; dx++) {
+      let at = { dx: m.sx, dy: m.sy, c: Infinity };
+      for (let dy = m.sy - 1; dy <= m.sy + 1; dy++) {
+        for (let dx = m.sx - 1; dx <= m.sx + 1; dx++) {
           const c = cost(dx, dy, step);
           if (c < at.c) at = { dx, dy, c };
         }
       }
-      let out = { ...at, c: cost(at.dx, at.dy) };
-      for (let d = at.dy - 1; d <= at.dy + 1.001; d += 0.25) {
-        const c = cost(at.dx, d);
-        if (c < out.c) out = { dx: at.dx, dy: d, c };
-      }
-      return out;
+      return at;
     })
     .sort((p, q) => p.c - q.c);
-  const top = fine[0];
-  const match = anchors.reduce((s, a) => s + (score(a, cur, curMask, top.dy, 1, null, top.dx) < T_MATCH ? a.weight : 0), 0) / total;
-  return { dx: top.dx, dy: top.dy, cost: top.c, rival: fine[1]?.c ?? Infinity, here: cost(0, 0), match };
+  // How close the best other place comes (in whole pixels, like the best), then the best one
+  // to the half and quarter pixel.
+  const rival = (whole.find((f) => Math.abs(f.dx - whole[0].dx) >= 3 || Math.abs(f.dy - whole[0].dy) >= 3)?.c ?? Infinity) - whole[0].c;
+  let top = { ...whole[0], c: cost(whole[0].dx, whole[0].dy) };
+  for (let e = whole[0].dx - 0.5; e <= whole[0].dx + 0.5; e += 0.5) {
+    for (let d = whole[0].dy - 1; d <= whole[0].dy + 1.001; d += 0.25) {
+      const c = cost(e, d);
+      if (c < top.c) top = { dx: e, dy: d, c };
+    }
+  }
+  const match = anchors.reduce((s, a) => s + (score(a, cur, curMask, top.dy, 1, null, top.dx) < T_MATCH_FAR ? a.weight : 0), 0) / total;
+  return { dx: top.dx, dy: top.dy, cost: top.c, rival: top.c + rival, here: cost(0, 0), match };
 }
 
 /** A score as a cost: anything that can't be compared counts as no match. */
@@ -492,22 +536,21 @@ export function judge(ref: Gray, refMask: Uint8Array, cur: Gray, curMask: Uint8A
     const lost = anchors.filter((a, k) => atFine[k] === Infinity || (atFine[k] >= T_LOST && staticAt(a, ref, refMask, cur, curMask, fine)));
     return verdict('moved', fine, steady, match, lost.map((a) => a.index));
   }
-  if (!moved && Math.abs(fine) <= 1) {
-    // Within a pixel of where it was (a sub-pixel scroll): still there.
-    if (match >= AGREE || (seenEnough && matchSeen >= AGREE)) return verdict('steady', 0, steady, match);
-    // No other shift comes close, but it doesn't quite match either (half a pixel off scores
-    // poorly where the screen changed; or a pointer or tooltip is over it): leave it be.
-    if (clear) return verdict('unsure', 0, steady, match);
-  }
+  const nearby = !moved && Math.abs(fine) <= 1;
+  // Within a pixel of where it was (a sub-pixel scroll): still there.
+  if (nearby && (match >= AGREE || (seenEnough && matchSeen >= AGREE))) return verdict('steady', 0, steady, match);
   // None of it is where it was and no scroll explains it: maybe it moved sideways too (a
   // dragged window, a sideways scroll). All of the group has to be there, and nowhere else.
   if (steady < GONE) {
     const far = locate(ref, refMask, cur, curMask, boxes, anchors, total);
-    if (far && Math.abs(far.dx) >= 2 && far.match >= AGREE && far.rival - far.cost >= RIVAL_MARGIN && far.cost < far.here * 0.6) {
+    if (far && far.dx !== 0 && far.match >= AGREE && far.rival - far.cost >= RIVAL_MARGIN && far.cost < far.here * 0.6) {
       const lost = anchors.filter((a) => score(a, cur, curMask, far.dy, 1, null, far.dx) === Infinity);
       return verdict('moved', far.dy, steady, far.match, lost.map((a) => a.index), far.dx);
     }
   }
+  // No other shift comes close, but it doesn't quite match either (half a pixel off scores
+  // poorly where the screen changed; or a pointer or tooltip is over it): leave it be.
+  if (nearby && clear) return verdict('unsure', 0, steady, match);
   if (steady < GONE && match < GONE + 0.1) return verdict('changed', 0, steady, match);
   return verdict('unsure', 0, steady, match);
 }
@@ -562,7 +605,7 @@ export interface StepResult {
   /** `gone`: all of it went (hide the marks); `back`: it's on screen again, `dy` (and `dx`) from where it was. */
   state: 'steady' | 'moved' | 'gone' | 'unsure' | 'back';
   dy: number;
-  /** moved, back: sideways too (whole pixels). */
+  /** moved, back: sideways too (half-pixel steps). */
   dx?: number;
   /** moved: anchors (indices) whose line went out of view — park those marks. */
   lost?: number[];
@@ -725,7 +768,7 @@ export class InkTracker {
         g.looks.delete(p.id);
         continue;
       }
-      if (score(seen.look, cur, mask, p.box.y + dy - seen.y, 1, null, Math.round(p.box.x + dx - seen.x)) < T_MATCH) {
+      if (score(seen.look, cur, mask, p.box.y + dy - seen.y, 1, null, p.box.x + dx - seen.x) < T_MATCH) {
         back.push(p.id);
         g.looks.delete(p.id);
       }

@@ -352,7 +352,7 @@ describe('sticky ink: a dragged window', () => {
 
   it('the marks go with it, sideways too', () => {
     const ref = desktop(7, 40, 50);
-    for (const [dx, dy] of [[40, 25], [-30, 10], [60, 0], [-15, -35], [3, 2]]) {
+    for (const [dx, dy] of [[40, 25], [-30, 10], [60, 0], [-15, -35], [3, 2], [1, 0], [-1, 1]]) {
       const v = judge(ref, m, desktop(7, 40 + dx, 50 + dy), m, boxes);
       expect(v.state, `dragged ${dx},${dy}`).toBe('moved');
       expect(v.dx, `dragged ${dx},${dy} → ${v.dx},${v.dy}`).toBe(dx);
@@ -384,6 +384,19 @@ describe('sticky ink: a dragged window', () => {
     }
     expect(marks[0].x).toBe(boxes[0].x + x - 40);
     expect(Math.abs(marks[0].y - (boxes[0].y + y - 50))).toBeLessThanOrEqual(0.5);
+  });
+
+  it('the last pixel of a drag, after a look caught it just short, is followed too', () => {
+    // (Seen in the README demo: a look at 68, 39 of a 70, 40 drag, then the window still.)
+    const t = new InkTracker();
+    t.step('g', desktop(7, 40, 50), m, boxes);
+    const r1 = t.step('g', desktop(7, 74, 69), m, boxes);
+    expect([r1.state, r1.dx, r1.dy]).toEqual(['moved', 34, 19]);
+    const marks = boxes.map((b) => ({ ...b, x: b.x + 34, y: b.y + 19 }));
+    const r2 = t.step('g', desktop(7, 75, 70), m, marks);
+    expect(r2.state).toBe('moved');
+    expect(r2.dx).toBe(1);
+    expect(Math.abs(r2.dy - 1)).toBeLessThanOrEqual(0.5);
   });
 
   it('a group that went away is found again in a window dragged elsewhere', () => {
