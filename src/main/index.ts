@@ -1,7 +1,7 @@
 import type { IndexStatus } from '@shared/courses';
 import { join } from 'node:path';
 import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
-import { APP_ID, APP_NAME } from '@shared/app-info';
+import { APP_ID, APP_NAME, WHATS_NEW } from '@shared/app-info';
 import type { InvokeChannel, InvokeMap, SendMap } from '@shared/ipc';
 import { findConflicts } from '@shared/shortcuts';
 import { displayForPoint } from '@shared/geometry';
@@ -235,7 +235,8 @@ async function main(): Promise<void> {
   handle('shortcuts:conflicts', (_e, map) => findConflicts(map));
   handle('whiteboard:snapshot', () => session.saveWhiteboardSnapshot());
   handle('whiteboard:state', () => session.whiteboard.state());
-  handle('onboarding:complete', () => settings.update({ onboardingComplete: true }));
+  // A new student has just seen everything in onboarding: no "What's new" card for them.
+  handle('onboarding:complete', () => settings.update({ onboardingComplete: true, whatsNewSeen: WHATS_NEW.id }));
 
   ipcMain.on('overlay:ready', (_e, m: SendMap['overlay:ready']) => session.overlays.markReady(m.displayId));
   ipcMain.on('overlay:hover', (_e, m: SendMap['overlay:hover']) => session.overlays.setHoverInteractive(m.displayId, m.interactive));

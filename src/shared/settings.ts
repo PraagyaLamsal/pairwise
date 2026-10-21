@@ -76,6 +76,8 @@ export interface Settings {
   /** Where the session bar was dragged to, per display (global DIP of its top-left corner). */
   hudPositions?: Record<string, { x: number; y: number }>;
   launchAtLogin: boolean;
+  /** The last "What's new" card the student closed (WHATS_NEW.id). */
+  whatsNewSeen: string;
 }
 
 export const DEFAULT_VEIL_APPS: VeilApp[] = [
@@ -126,6 +128,7 @@ export function defaultSettings(): Settings {
     liveMediaResolution: 'MEDIA_RESOLUTION_MEDIUM',
     onboardingComplete: false,
     launchAtLogin: false,
+    whatsNewSeen: '',
   };
 }
 

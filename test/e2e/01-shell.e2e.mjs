@@ -47,6 +47,7 @@ try {
   await hub.click('.course-tile >> nth=0');
   await sleep(700);
   await hub.screenshot({ path: join(artifacts, 'p1-courses.png') });
+  assert.equal(await hub.locator('.whats-new').count(), 0, 'a new student is not shown "What\'s new" (onboarding covered it)');
 
   // --- start a session ---
   await hub.click('button:has-text("Start session")');

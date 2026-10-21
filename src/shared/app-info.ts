@@ -37,3 +37,17 @@ export const VOICES: { name: string; vibe: string }[] = [
   { name: 'Schedar', vibe: 'Even' },
   { name: 'Umbriel', vibe: 'Easy-going' },
 ];
+
+/**
+ * The hub's one-time "What's new" card: shown once to someone who already used Pairwise (not on
+ * a fresh install, where onboarding says it all). Bump `id` for the next set of notable changes.
+ */
+export const WHATS_NEW = {
+  id: '2026-10-round-2',
+  items: [
+    { icon: 'pointer', title: 'She traces your code like a debugger', text: 'Ask what your code returns: her cursor steps through the lines as they run and the values appear right beside each one.' },
+    { icon: 'check', title: '“Show me” questions', text: 'Now and then she asks you to click the answer on your own screen — and tells you if you got it.' },
+    { icon: 'pen', title: 'A quieter screen, like a Tuple call', text: 'Her cursor stays where she leaves it and fades back. She mostly points, and draws in a flat brush.' },
+    { icon: 'bolt', title: 'Lighter and steadier', text: 'About half the CPU when idle, macOS Reduce motion respected, and a Wi-Fi drop no longer ends the session.' },
+  ],
+} as const;

@@ -750,3 +750,46 @@
   font-size: 12px;
   padding: 6px 2px;
 }
+
+/* ---------- "What's new" (once, after an update) ---------- */
+.whats-new {
+  margin: -4px 0 18px;
+  padding: 12px 14px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(47, 123, 255, 0.09), rgba(47, 123, 255, 0.04));
+  border: 1px solid rgba(47, 123, 255, 0.28);
+}
+.wn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.wn-head .hand {
+  font-family: var(--font-hand);
+  font-size: 19px;
+  color: var(--tutor-hi);
+}
+.wn-items {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 18px;
+}
+.wn-item {
+  display: flex;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.wn-item svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tutor-hi);
+}
+.wn-item b {
+  display: block;
+  color: var(--text);
+  font-weight: 620;
+  margin-bottom: 1px;
+}

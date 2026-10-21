@@ -402,3 +402,10 @@ so she can check in. Found while testing this: when a connection never opened (r
 network, DNS), Node's WebSocket fires `error` but no `close`, so every failed attempt — including
 starting a session offline — waited out the full 15 s timeout. It now fails within ~0.25 s
 with "Couldn't reach Gemini Live", and a reconnect attempt waits at most 8 s.
+
+### D-043 · A one-time "What's new" card in the hub
+After an update the student has no way to know Ada can now trace code or ask "Show me"
+questions. The Courses page shows a small card once ("New:" and four lines), closed for good by
+"Got it" (`settings.whatsNewSeen` = `WHATS_NEW.id` in `src/shared/app-info.ts`; bump the id for the
+next set of changes). A fresh install never sees it — finishing onboarding marks it seen, as
+onboarding already shows what she does. It lives in the hub only, never on the session screen.

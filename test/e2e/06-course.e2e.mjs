@@ -44,6 +44,13 @@ try {
   await main(app, () => globalThis.__pairwise.hub.open('courses'));
   const hub = await windowByRole(app, 'hub');
   await hub.setViewportSize({ width: 1060, height: 900 }).catch(() => undefined);
+  // Someone who used Pairwise before this version sees what's new, once.
+  await hub.waitForSelector('.whats-new', { timeout: 10_000 });
+  assert.equal(await hub.locator('.wn-item').count(), 4, 'four new things');
+  await hub.locator('.whats-new').screenshot({ path: join(artifacts, 'p4-whats-new.png') });
+  await hub.click('.whats-new button:has-text("Got it")');
+  await waitFor(async () => (await hub.locator('.whats-new').count()) === 0, { label: 'the card goes away' });
+  assert.equal(await main(app, () => globalThis.__pairwise.settings.get().whatsNewSeen), '2026-10-round-2', 'for good');
   await sleep(500);
   await hub.click('.course-tile >> nth=0').catch(() => undefined);
   await hub.waitForSelector('text=What Ada knows about this course', { timeout: 15_000 });
